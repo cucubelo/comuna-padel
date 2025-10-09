@@ -6,7 +6,9 @@
     "dev": "next dev --turbopack",
     "build": "next build --turbopack",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "release": "git fetch origin && git switch dev && git pull && git switch main && git pull && git merge --no-ff dev -m \"release: merge dev into main\" && git push origin main",
+    "release:sync-dev": "git switch dev && git merge origin/main && git push"
   },
   "dependencies": {
     "react": "19.1.0",
