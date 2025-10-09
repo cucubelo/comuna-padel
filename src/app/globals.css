@@ -1,26 +1,67 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Comunidad de Pádel - Dark Theme Color Palette */
+  
+  /* Backgrounds */
+  --bg-main: #0F0F0F;
+  --bg-secondary: #1A1A1A;
+  
+  /* Accents */
+  --accent-primary: #00D4AA;
+  --accent-secondary: #FF6B35;
+  
+  /* Text */
+  --text-main: #FFFFFF;
+  --text-secondary: #B0B0B0;
+  
+  /* Borders */
+  --border-color: #333333;
+  
+  /* Status Colors */
+  --success: #4CAF50;
+  --warning: #FF9800;
+  --error: #F44336;
+  --info: #2196F3;
+  
+  /* Fonts */
+  --font-montserrat: var(--font-montserrat);
+  --font-open-sans: var(--font-open-sans);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  /* Background Colors */
+  --color-bg-main: var(--bg-main);
+  --color-bg-secondary: var(--bg-secondary);
+  
+  /* Accent Colors */
+  --color-accent-primary: var(--accent-primary);
+  --color-accent-secondary: var(--accent-secondary);
+  
+  /* Text Colors */
+  --color-text-main: var(--text-main);
+  --color-text-secondary: var(--text-secondary);
+  
+  /* Border Colors */
+  --color-border: var(--border-color);
+  
+  /* Status Colors */
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-error: var(--error);
+  --color-info: var(--info);
+  
+  /* Fonts */
+  --font-sans: var(--font-open-sans);
+  --font-heading: var(--font-montserrat);
+  
+  /* Legacy support for existing classes */
+  --color-background: var(--bg-main);
+  --color-foreground: var(--text-main);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg-main);
+  color: var(--text-main);
+  font-family: var(--font-open-sans), system-ui, -apple-system, sans-serif;
 }
