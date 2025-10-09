@@ -27,177 +27,239 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   }
 })
 
-// Tipos de base de datos basados en el schema proporcionado
+// Tipos de base de datos basados en la estructura real de Supabase
 export type Database = {
   public: {
     Tables: {
       profiles: {
         Row: {
           id: string
+          username: string | null
           email: string
           full_name: string | null
           avatar_url: string | null
           phone: string | null
-          skill_level: 'beginner' | 'intermediate' | 'advanced' | 'expert'
-          preferred_position: 'left' | 'right' | 'both'
-          bio: string | null
           location: string | null
+          bio: string | null
+          skill_level: number | null
+          preferred_position: 'left' | 'right' | 'both' | null
+          subscription_status: 'free' | 'premium' | 'pro'
           created_at: string
-          updated_at: string
+          updated_at: string | null
+          matches_played: number
+          matches_won: number
+          matches_lost: number
         }
         Insert: {
           id: string
+          username?: string | null
           email: string
           full_name?: string | null
           avatar_url?: string | null
           phone?: string | null
-          skill_level?: 'beginner' | 'intermediate' | 'advanced' | 'expert'
-          preferred_position?: 'left' | 'right' | 'both'
-          bio?: string | null
           location?: string | null
+          bio?: string | null
+          skill_level?: number | null
+          preferred_position?: 'left' | 'right' | 'both' | null
+          subscription_status?: 'free' | 'premium' | 'pro'
           created_at?: string
-          updated_at?: string
+          updated_at?: string | null
+          matches_played?: number
+          matches_won?: number
+          matches_lost?: number
         }
         Update: {
           id?: string
+          username?: string | null
           email?: string
           full_name?: string | null
           avatar_url?: string | null
           phone?: string | null
-          skill_level?: 'beginner' | 'intermediate' | 'advanced' | 'expert'
-          preferred_position?: 'left' | 'right' | 'both'
-          bio?: string | null
           location?: string | null
-          updated_at?: string
+          bio?: string | null
+          skill_level?: number | null
+          preferred_position?: 'left' | 'right' | 'both' | null
+          subscription_status?: 'free' | 'premium' | 'pro'
+          updated_at?: string | null
+          matches_played?: number
+          matches_won?: number
+          matches_lost?: number
         }
       }
       groups: {
         Row: {
           id: string
+          creator_id: string
           name: string
           description: string | null
-          creator_id: string
-          max_members: number
-          is_private: boolean
-          location: string | null
-          skill_level_required: 'beginner' | 'intermediate' | 'advanced' | 'expert' | null
+          group_type: 'private' | 'public'
+          city: string | null
           created_at: string
-          updated_at: string
         }
         Insert: {
           id?: string
+          creator_id: string
           name: string
           description?: string | null
-          creator_id: string
-          max_members?: number
-          is_private?: boolean
-          location?: string | null
-          skill_level_required?: 'beginner' | 'intermediate' | 'advanced' | 'expert' | null
+          group_type?: 'private' | 'public'
+          city?: string | null
           created_at?: string
-          updated_at?: string
         }
         Update: {
           id?: string
+          creator_id?: string
           name?: string
           description?: string | null
-          creator_id?: string
-          max_members?: number
-          is_private?: boolean
-          location?: string | null
-          skill_level_required?: 'beginner' | 'intermediate' | 'advanced' | 'expert' | null
-          updated_at?: string
+          group_type?: 'private' | 'public'
+          city?: string | null
         }
       }
       group_members: {
         Row: {
-          id: string
           group_id: string
           user_id: string
           role: 'admin' | 'member'
           joined_at: string
+          points: number
         }
         Insert: {
-          id?: string
           group_id: string
           user_id: string
           role?: 'admin' | 'member'
           joined_at?: string
+          points?: number
         }
         Update: {
-          id?: string
           group_id?: string
           user_id?: string
           role?: 'admin' | 'member'
           joined_at?: string
+          points?: number
         }
       }
       matches: {
         Row: {
           id: string
           group_id: string
-          organizer_id: string
-          title: string
-          description: string | null
-          scheduled_date: string
-          duration_minutes: number
-          max_participants: number
-          court_location: string | null
-          cost_per_person: number | null
+          creator_id: string | null
+          scheduled_at: string
+          location_name: string
+          latitude: number | null
+          longitude: number | null
           status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled'
+          is_public: boolean
+          required_skill_level: number | null
+          team1_score: number | null
+          team2_score: number | null
           created_at: string
-          updated_at: string
         }
         Insert: {
           id?: string
           group_id: string
-          organizer_id: string
-          title: string
-          description?: string | null
-          scheduled_date: string
-          duration_minutes?: number
-          max_participants?: number
-          court_location?: string | null
-          cost_per_person?: number | null
+          creator_id?: string | null
+          scheduled_at: string
+          location_name: string
+          latitude?: number | null
+          longitude?: number | null
           status?: 'scheduled' | 'in_progress' | 'completed' | 'cancelled'
+          is_public?: boolean
+          required_skill_level?: number | null
+          team1_score?: number | null
+          team2_score?: number | null
           created_at?: string
-          updated_at?: string
         }
         Update: {
           id?: string
           group_id?: string
-          organizer_id?: string
-          title?: string
-          description?: string | null
-          scheduled_date?: string
-          duration_minutes?: number
-          max_participants?: number
-          court_location?: string | null
-          cost_per_person?: number | null
+          creator_id?: string | null
+          scheduled_at?: string
+          location_name?: string
+          latitude?: number | null
+          longitude?: number | null
           status?: 'scheduled' | 'in_progress' | 'completed' | 'cancelled'
-          updated_at?: string
+          is_public?: boolean
+          required_skill_level?: number | null
+          team1_score?: number | null
+          team2_score?: number | null
         }
       }
       match_participants: {
         Row: {
+          match_id: string
+          user_id: string
+          team_number: number | null
+          joined_at: string
+          status: string | null
+        }
+        Insert: {
+          match_id: string
+          user_id: string
+          team_number?: number | null
+          joined_at?: string
+          status?: string | null
+        }
+        Update: {
+          match_id?: string
+          user_id?: string
+          team_number?: number | null
+          joined_at?: string
+          status?: string | null
+        }
+      }
+      chat_messages: {
+        Row: {
+          id: number
+          sender_id: string
+          group_id: string | null
+          match_id: string | null
+          content: string
+          created_at: string
+        }
+        Insert: {
+          id?: number
+          sender_id: string
+          group_id?: string | null
+          match_id?: string | null
+          content: string
+          created_at?: string
+        }
+        Update: {
+          id?: number
+          sender_id?: string
+          group_id?: string | null
+          match_id?: string | null
+          content?: string
+        }
+      }
+      payments: {
+        Row: {
           id: string
           match_id: string
           user_id: string
-          status: 'confirmed' | 'pending' | 'declined'
-          joined_at: string
+          amount: number
+          status: string
+          payment_provider_tx_id: string | null
+          created_at: string
+          updated_at: string | null
         }
         Insert: {
           id?: string
           match_id: string
           user_id: string
-          status?: 'confirmed' | 'pending' | 'declined'
-          joined_at?: string
+          amount: number
+          status?: string
+          payment_provider_tx_id?: string | null
+          created_at?: string
+          updated_at?: string | null
         }
         Update: {
           id?: string
           match_id?: string
           user_id?: string
-          status?: 'confirmed' | 'pending' | 'declined'
-          joined_at?: string
+          amount?: number
+          status?: string
+          payment_provider_tx_id?: string | null
+          updated_at?: string | null
         }
       }
     }
@@ -208,11 +270,12 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      skill_level: 'beginner' | 'intermediate' | 'advanced' | 'expert'
-      preferred_position: 'left' | 'right' | 'both'
-      group_role: 'admin' | 'member'
+      group_type: 'private' | 'public'
+      user_role: 'admin' | 'member'
       match_status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled'
-      participant_status: 'confirmed' | 'pending' | 'declined'
+      subscription_status: 'free' | 'premium' | 'pro'
+      skill_level: 'beginner' | 'intermediate' | 'advanced' | 'professional'
+      preferred_position: 'left' | 'right' | 'both'
     }
   }
 }

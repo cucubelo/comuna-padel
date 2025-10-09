@@ -2,11 +2,6 @@
 
 import React, { useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
-import { useRouter } from 'next/navigation'
-import { Database } from '@/lib/supabase'
-
-type SkillLevel = Database['public']['Enums']['skill_level']
-type PreferredPosition = Database['public']['Enums']['preferred_position']
 
 interface RegisterFormProps {
   onToggleMode?: () => void
@@ -17,12 +12,7 @@ export default function RegisterForm({ onToggleMode }: RegisterFormProps) {
     email: '',
     password: '',
     confirmPassword: '',
-    fullName: '',
-    phone: '',
-    skillLevel: 'beginner' as SkillLevel,
-    preferredPosition: 'both' as PreferredPosition,
-    bio: '',
-    location: ''
+    fullName: ''
   })
   
   const [loading, setLoading] = useState(false)
@@ -31,9 +21,6 @@ export default function RegisterForm({ onToggleMode }: RegisterFormProps) {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
 
   const { signUp } = useAuth()
-  const router = useRouter()
-
-
 
   const validateForm = () => {
     if (!formData.email || !formData.password || !formData.fullName) {
@@ -50,10 +37,6 @@ export default function RegisterForm({ onToggleMode }: RegisterFormProps) {
 
     if (formData.password !== formData.confirmPassword) {
       return 'Las contraseñas no coinciden'
-    }
-
-    if (formData.phone && !/^\+?[\d\s\-\(\)]+$/.test(formData.phone)) {
-      return 'Por favor, ingresa un número de teléfono válido'
     }
 
     return null
@@ -74,11 +57,12 @@ export default function RegisterForm({ onToggleMode }: RegisterFormProps) {
     try {
       const { error } = await signUp(formData.email, formData.password, {
         full_name: formData.fullName,
-        phone: formData.phone || null,
-        skill_level: formData.skillLevel,
-        preferred_position: formData.preferredPosition,
-        bio: formData.bio || null,
-        location: formData.location || null
+        // Los demás campos se completarán en el dashboard
+        phone: null,
+        skill_level: 'principiante', // Valor por defecto
+        preferred_position: 'ambas', // Valor por defecto
+        bio: null,
+        location: null
       })
 
       if (error) {
@@ -91,9 +75,8 @@ export default function RegisterForm({ onToggleMode }: RegisterFormProps) {
         }
       } else {
         // Mostrar mensaje de éxito
-        alert('¡Cuenta creada exitosamente! Serás redirigido al dashboard.')
+        alert('¡Cuenta creada exitosamente! Completa tu perfil en el dashboard.')
         // No redirigir manualmente - dejar que el AuthContext maneje la redirección automática
-        // cuando el usuario esté autenticado
       }
     } catch (err) {
       setError('Error inesperado. Inténtalo de nuevo.')
@@ -104,265 +87,187 @@ export default function RegisterForm({ onToggleMode }: RegisterFormProps) {
   }
 
   return (
-    <div className="w-full max-w-2xl mx-auto">
-      <div className="bg-bg-secondary rounded-lg shadow-lg p-8 border border-border">
-        <div className="text-center mb-8">
-          <h2 className="text-3xl font-bold text-text-main font-montserrat">
-            Crear Cuenta
-          </h2>
-          <p className="text-text-secondary mt-2 font-open-sans">
-            Conecta con jugadores y únete a múltiples grupos de padel
-          </p>
-        </div>
+    <div className="w-full">
+      <div className="text-center mb-6">
+        <h2 className="text-2xl md:text-3xl font-bold text-text-main font-montserrat">
+          Crear Cuenta
+        </h2>
+        <p className="text-text-secondary mt-2 font-open-sans text-sm">
+          Únete a Comuna Padel en segundos
+        </p>
+      </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {error && (
-            <div className="bg-error/10 border border-error/20 rounded-md p-4">
-              <div className="flex">
-                <div className="flex-shrink-0">
-                  <svg className="h-5 w-5 text-error" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                  </svg>
-                </div>
-                <div className="ml-3">
-                  <p className="text-sm text-error font-open-sans">{error}</p>
-                </div>
+      <form onSubmit={handleSubmit} className="space-y-5">
+        {error && (
+          <div className="bg-error/10 border border-error/20 rounded-xl p-4">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-error" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
               </div>
-            </div>
-          )}
-
-          {/* Información Personal */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label htmlFor="email" className="block text-sm font-semibold text-text-main mb-2 font-open-sans">
-                Email *
-              </label>
-              <input
-                id="email"
-                type="email"
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                className="w-full px-4 py-3 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-accent-primary focus:border-transparent transition-colors font-open-sans bg-bg-main text-text-main placeholder-text-secondary"
-                placeholder="tu@email.com"
-                disabled={loading}
-                required
-              />
-            </div>
-
-            <div>
-              <label htmlFor="fullName" className="block text-sm font-semibold text-text-main mb-2 font-open-sans">
-                Nombre Completo *
-              </label>
-              <input
-                id="fullName"
-                type="text"
-                value={formData.fullName}
-                onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                className="w-full px-4 py-3 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-accent-primary focus:border-transparent transition-colors font-open-sans bg-bg-main text-text-main placeholder-text-secondary"
-                placeholder="Juan Pérez"
-                disabled={loading}
-                required
-              />
-            </div>
-          </div>
-
-          {/* Contraseñas */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label htmlFor="password" className="block text-sm font-semibold text-text-main mb-2 font-open-sans">
-                Contraseña *
-              </label>
-              <div className="relative">
-                <input
-                  id="password"
-                  type={showPassword ? 'text' : 'password'}
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className="w-full px-4 py-3 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-accent-primary focus:border-transparent transition-colors font-open-sans pr-12 bg-bg-main text-text-main placeholder-text-secondary"
-                  placeholder="••••••••"
-                  disabled={loading}
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                  disabled={loading}
-                >
-                  {showPassword ? (
-                    <svg className="h-5 w-5 text-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21" />
-                    </svg>
-                  ) : (
-                    <svg className="h-5 w-5 text-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                    </svg>
-                  )}
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <label htmlFor="confirmPassword" className="block text-sm font-semibold text-text-main mb-2 font-open-sans">
-                Confirmar Contraseña *
-              </label>
-              <div className="relative">
-                <input
-                  id="confirmPassword"
-                  type={showConfirmPassword ? 'text' : 'password'}
-                  value={formData.confirmPassword}
-                  onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                  className="w-full px-4 py-3 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-accent-primary focus:border-transparent transition-colors font-open-sans pr-12 bg-bg-main text-text-main placeholder-text-secondary"
-                  placeholder="••••••••"
-                  disabled={loading}
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                  disabled={loading}
-                >
-                  {showConfirmPassword ? (
-                    <svg className="h-5 w-5 text-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21" />
-                    </svg>
-                  ) : (
-                    <svg className="h-5 w-5 text-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                    </svg>
-                  )}
-                </button>
+              <div className="ml-3">
+                <p className="text-sm text-error font-open-sans">{error}</p>
               </div>
             </div>
           </div>
+        )}
 
-          {/* Información de Contacto */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label htmlFor="phone" className="block text-sm font-semibold text-text-main mb-2 font-open-sans">
-                Teléfono
-              </label>
-              <input
-                id="phone"
-                type="tel"
-                value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                className="w-full px-4 py-3 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-accent-primary focus:border-transparent transition-colors font-open-sans bg-bg-main text-text-main placeholder-text-secondary"
-                placeholder="+34 600 123 456"
-                disabled={loading}
-              />
-            </div>
-
-            <div>
-              <label htmlFor="location" className="block text-sm font-semibold text-text-main mb-2 font-open-sans">
-                Ubicación
-              </label>
-              <input
-                id="location"
-                type="text"
-                value={formData.location}
-                onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                className="w-full px-4 py-3 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-accent-primary focus:border-transparent transition-colors font-open-sans bg-bg-main text-text-main placeholder-text-secondary"
-                placeholder="Madrid, España"
-                disabled={loading}
-              />
-            </div>
-          </div>
-
-          {/* Información de Padel */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label htmlFor="skillLevel" className="block text-sm font-semibold text-text-main mb-2 font-open-sans">
-                Nivel de Juego *
-              </label>
-              <select
-                id="skillLevel"
-                value={formData.skillLevel}
-                onChange={(e) => setFormData({ ...formData, skillLevel: e.target.value as SkillLevel })}
-                className="w-full px-4 py-3 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-accent-primary focus:border-transparent transition-colors font-open-sans bg-bg-main text-text-main"
-                disabled={loading}
-                required
-              >
-                <option value="">Selecciona tu nivel</option>
-                <option value="principiante">Principiante</option>
-                <option value="intermedio">Intermedio</option>
-                <option value="avanzado">Avanzado</option>
-                <option value="profesional">Profesional</option>
-              </select>
-            </div>
-
-            <div>
-              <label htmlFor="preferredPosition" className="block text-sm font-semibold text-text-main mb-2 font-open-sans">
-                Posición Preferida
-              </label>
-              <select
-                id="preferredPosition"
-                value={formData.preferredPosition}
-                onChange={(e) => setFormData({ ...formData, preferredPosition: e.target.value as PreferredPosition })}
-                className="w-full px-4 py-3 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-accent-primary focus:border-transparent transition-colors font-open-sans bg-bg-main text-text-main"
-                disabled={loading}
-              >
-                <option value="">Selecciona tu posición</option>
-                <option value="derecha">Derecha</option>
-                <option value="izquierda">Izquierda</option>
-                <option value="ambas">Ambas</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Bio */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label htmlFor="bio" className="block text-sm font-semibold text-text-main mb-2 font-open-sans">
-              Biografía
+            <label htmlFor="email" className="block text-sm font-semibold text-text-main mb-2 font-open-sans">
+              Email *
             </label>
-            <textarea
-              id="bio"
-              value={formData.bio}
-              onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
-              rows={3}
-              className="w-full px-4 py-3 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-accent-primary focus:border-transparent transition-colors font-open-sans resize-none bg-bg-main text-text-main placeholder-text-secondary"
-              placeholder="Cuéntanos un poco sobre ti y tu experiencia en el padel..."
+            <input
+              id="email"
+              type="email"
+              value={formData.email}
+              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              className="w-full px-4 py-4 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-accent-primary focus:border-transparent transition-all duration-200 font-open-sans bg-bg-main text-text-main placeholder-text-secondary text-base"
+              placeholder="tu@email.com"
               disabled={loading}
+              required
             />
           </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-accent-primary text-bg-main py-3 px-4 rounded-md hover:bg-accent-primary/90 focus:outline-none focus:ring-2 focus:ring-accent-primary focus:ring-offset-2 focus:ring-offset-bg-secondary disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-semibold font-open-sans"
-          >
-            {loading ? (
-              <div className="flex items-center justify-center">
-                <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-bg-main" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                Creando cuenta...
-              </div>
-            ) : (
-              'Crear Cuenta'
-            )}
-          </button>
-        </form>
+          <div>
+            <label htmlFor="fullName" className="block text-sm font-semibold text-text-main mb-2 font-open-sans">
+              Nombre Completo *
+            </label>
+            <input
+              id="fullName"
+              type="text"
+              value={formData.fullName}
+              onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
+              className="w-full px-4 py-4 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-accent-primary focus:border-transparent transition-all duration-200 font-open-sans bg-bg-main text-text-main placeholder-text-secondary text-base"
+              placeholder="Juan Pérez"
+              disabled={loading}
+              required
+            />
+          </div>
+        </div>
 
-        {onToggleMode && (
-          <div className="mt-6 text-center">
-            <p className="text-text-secondary font-open-sans">
-              ¿Ya tienes una cuenta?{' '}
+        {/* Contraseñas */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label htmlFor="password" className="block text-sm font-semibold text-text-main mb-2 font-open-sans">
+              Contraseña *
+            </label>
+            <div className="relative">
+              <input
+                id="password"
+                type={showPassword ? 'text' : 'password'}
+                value={formData.password}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                className="w-full px-4 py-4 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-accent-primary focus:border-transparent transition-all duration-200 font-open-sans pr-12 bg-bg-main text-text-main placeholder-text-secondary text-base"
+                placeholder="••••••••"
+                disabled={loading}
+                required
+              />
               <button
-                onClick={onToggleMode}
-                className="text-accent-primary hover:text-accent-primary/80 font-semibold transition-colors"
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute inset-y-0 right-0 pr-4 flex items-center touch-manipulation"
                 disabled={loading}
               >
-                Inicia sesión aquí
+                {showPassword ? (
+                  <svg className="h-6 w-6 text-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21" />
+                  </svg>
+                ) : (
+                  <svg className="h-6 w-6 text-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                  </svg>
+                )}
               </button>
-            </p>
+            </div>
           </div>
-        )}
-      </div>
+
+          <div>
+            <label htmlFor="confirmPassword" className="block text-sm font-semibold text-text-main mb-2 font-open-sans">
+              Confirmar Contraseña *
+            </label>
+            <div className="relative">
+              <input
+                id="confirmPassword"
+                type={showConfirmPassword ? 'text' : 'password'}
+                value={formData.confirmPassword}
+                onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+                className="w-full px-4 py-4 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-accent-primary focus:border-transparent transition-all duration-200 font-open-sans pr-12 bg-bg-main text-text-main placeholder-text-secondary text-base"
+                placeholder="••••••••"
+                disabled={loading}
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                className="absolute inset-y-0 right-0 pr-4 flex items-center touch-manipulation"
+                disabled={loading}
+              >
+                {showConfirmPassword ? (
+                  <svg className="h-6 w-6 text-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21" />
+                  </svg>
+                ) : (
+                  <svg className="h-6 w-6 text-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                  </svg>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-accent-primary/10 border border-accent-primary/20 rounded-xl p-4">
+          <div className="flex">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-accent-primary" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <p className="text-sm text-accent-primary font-open-sans">
+                Podrás completar tu perfil de padel (nivel, posición preferida, etc.) una vez dentro del dashboard.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full bg-accent-primary text-white py-4 px-4 rounded-xl hover:bg-accent-primary/90 focus:outline-none focus:ring-2 focus:ring-accent-primary focus:ring-offset-2 focus:ring-offset-white disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-semibold font-open-sans text-base shadow-lg touch-manipulation"
+        >
+          {loading ? (
+            <div className="flex items-center justify-center">
+              <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              Creando cuenta...
+            </div>
+          ) : (
+            'Crear Cuenta'
+          )}
+        </button>
+      </form>
+
+      {onToggleMode && (
+        <div className="mt-8 text-center">
+          <p className="text-text-secondary font-open-sans text-base">
+            ¿Ya tienes una cuenta?{' '}
+            <button
+              onClick={onToggleMode}
+              className="text-accent-primary hover:text-accent-primary/80 font-semibold transition-all duration-200 touch-manipulation"
+              disabled={loading}
+            >
+              Inicia sesión aquí
+            </button>
+          </p>
+        </div>
+      )}
     </div>
   )
 }

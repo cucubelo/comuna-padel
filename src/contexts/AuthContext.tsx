@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 'use client'
 
 import React, { createContext, useContext, useEffect, useState } from 'react'
@@ -38,9 +39,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (error) {
         // PGRST116 significa que no se encontraron filas (0 rows)
-        // Esto es normal para usuarios nuevos que aún no tienen perfil
+        // Para usuarios nuevos, intentamos crear un perfil básico automáticamente
         if (error.code === 'PGRST116') {
-          console.log('No se encontró perfil para el usuario, esto es normal para usuarios nuevos')
+          console.log('No se encontró perfil para el usuario, creando perfil básico...')
+          
+          // Obtener información del usuario autenticado
+          const { data: { user } } = await supabase.auth.getUser()
+          
+          if (user && user.id === userId) {
+            // Crear perfil básico automáticamente
+            const username = (user.user_metadata?.username as string | undefined)
+              ?? (user.email ? user.email.split('@')[0] : `user_${user.id.slice(0, 8)}`)
+            const { data: newProfile, error: createError } = await supabase
+              .from('profiles')
+              .insert({
+                id: userId,
+                username,
+                full_name: user.user_metadata?.full_name || null,
+                skill_level: typeof user.user_metadata?.skill_level === 'number' ? user.user_metadata?.skill_level : 1
+              })
+              .select()
+              .single()
+
+            if (createError) {
+              console.error('Error creando perfil automáticamente:', createError)
+              return null
+            }
+
+            console.log('Perfil creado automáticamente:', newProfile)
+            return newProfile
+          }
+          
           return null
         }
         
@@ -64,19 +93,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   // Función para registrarse
-  const signUp = async (email: string, password: string, userData?: Partial<Profile>) => {
+  const signUp = async (email: string, password: string, userData?: Record<string, unknown>) => {
     try {
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
           data: {
-            full_name: userData?.full_name || '',
-            phone: userData?.phone || '',
-            skill_level: userData?.skill_level || 'beginner',
-            preferred_position: userData?.preferred_position || 'both',
-            bio: userData?.bio || '',
-            location: userData?.location || ''
+            full_name: (userData as any)?.full_name || '',
+            phone: (userData as any)?.phone || '',
+            skill_level: typeof (userData as any)?.skill_level === 'number' ? (userData as any).skill_level : 1,
+            preferred_position: (userData as any)?.preferred_position || 'both',
+            bio: (userData as any)?.bio || '',
+            location: (userData as any)?.location || ''
           }
         }
       })
@@ -88,22 +117,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // Si el registro es exitoso y hay un usuario, crear el perfil
       if (data.user) {
+        const username = ((userData as any)?.username as string | undefined)
+          ?? (data.user.email ? data.user.email.split('@')[0] : `user_${data.user.id.slice(0, 8)}`)
         const { error: profileError } = await supabase
           .from('profiles')
           .insert({
             id: data.user.id,
-            email: data.user.email!,
-            full_name: userData?.full_name || null,
-            phone: userData?.phone || null,
-            skill_level: userData?.skill_level || 'beginner',
-            preferred_position: userData?.preferred_position || 'both',
-            bio: userData?.bio || null,
-            location: userData?.location || null
+            username,
+            full_name: (userData as any)?.full_name || null,
+            skill_level: typeof (userData as any)?.skill_level === 'number' ? (userData as any).skill_level : 1
           })
-
-        if (profileError) {
-          console.error('Error creando perfil:', profileError)
-        }
+ 
+         if (profileError) {
+           console.error('Error creando perfil:', profileError)
+         }
       }
 
       return { error: null }
@@ -162,10 +189,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
+      const { bio: _omitBio, email: _omitEmail, phone: _omitPhone, location: _omitLocation, preferred_position: _omitPreferredPosition, ...safeUpdates } = updates as any
       const { data, error } = await supabase
         .from('profiles')
         .update({
-          ...updates,
+          ...safeUpdates,
           updated_at: new Date().toISOString()
         })
         .eq('id', user.id)
@@ -178,17 +206,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           console.log('Perfil no existe, creando uno nuevo...')
           
           // Crear perfil básico
+          const username = (updates.username as string | undefined)
+            ?? (user.email ? user.email.split('@')[0] : `user_${user.id.slice(0, 8)}`)
           const { data: newProfile, error: createError } = await supabase
             .from('profiles')
             .insert({
               id: user.id,
-              email: user.email!,
+              username,
               full_name: updates.full_name || null,
-              phone: updates.phone || null,
-              skill_level: updates.skill_level || 'beginner',
-              preferred_position: updates.preferred_position || 'both',
-              bio: updates.bio || null,
-              location: updates.location || null
+              skill_level: typeof updates.skill_level === 'number' ? updates.skill_level : 1
             })
             .select()
             .single()
