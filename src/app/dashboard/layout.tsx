@@ -1,9 +1,12 @@
+/* eslint-disable @next/next/no-img-element */
 'use client'
 
 import React, { useState } from 'react'
 import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
 import { usePathname } from 'next/navigation'
+import LogoutButton from '@/components/dashboard/LogoutButton'
+import SessionDebugger from '@/components/dashboard/SessionDebugger'
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { user, profile } = useAuth()
@@ -55,7 +58,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <Link href="/dashboard/stats" className={`${isActive('/dashboard/stats') ? 'text-text-main font-semibold' : 'text-text-secondary hover:text-text-main'} font-open-sans`}>Estadísticas</Link>
             </nav>
 
-            {/* Actions: Create group + Avatar + Mobile menu toggle */}
+            {/* Actions: Create group + Avatar + Logout + Mobile menu toggle */}
             <div className="flex items-center gap-4">
               <Link href="/dashboard/groups?tab=my-groups&create=true" className="bg-accent-primary text-bg-main px-4 py-2 rounded-md hover:bg-accent-primary/90 transition-colors font-semibold font-open-sans hidden sm:inline-block">
                 Crear Grupo
@@ -72,6 +75,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 </div>
                 <span className="hidden md:inline text-text-secondary font-open-sans truncate max-w-[160px]">{displayName}</span>
               </Link>
+              <LogoutButton />
               <button
                 type="button"
                 aria-expanded={mobileMenuOpen}
@@ -184,6 +188,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </ul>
         </div>
       </nav>
+
+      {/* Session Debugger - solo en desarrollo */}
+      <SessionDebugger />
     </div>
   )
 }

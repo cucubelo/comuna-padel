@@ -200,6 +200,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Función para cerrar sesión
   const signOut = async () => {
     try {
+      console.log("Iniciando proceso de cierre de sesión...");
+      
       const { error } = await supabase.auth.signOut();
 
       if (error) {
@@ -207,11 +209,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return { error };
       }
 
-      // Limpiar estado local
+      // Limpiar estado local inmediatamente
       setUser(null);
       setProfile(null);
       setSession(null);
+      setLoading(false);
 
+      console.log("Sesión cerrada exitosamente");
       return { error: null };
     } catch (error) {
       console.error("Error inesperado cerrando sesión:", error);
@@ -302,24 +306,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     // Obtener sesión inicial
     const getInitialSession = async () => {
-      const {
-        data: { session },
-        error,
-      } = await supabase.auth.getSession();
+      try {
+        console.log("Obteniendo sesión inicial...");
+        
+        const {
+          data: { session },
+          error,
+        } = await supabase.auth.getSession();
 
-      if (error) {
-        console.error("Error obteniendo sesión inicial:", error);
+        if (error) {
+          console.error("Error obteniendo sesión inicial:", error);
+          setLoading(false);
+          return;
+        }
+
+        console.log("Sesión inicial obtenida:", session ? "Sesión activa" : "Sin sesión");
+        
+        setSession(session);
+        setUser(session?.user ?? null);
+
+        if (session?.user) {
+          console.log("Cargando perfil para usuario:", session.user.id);
+          const profileData = await loadProfile(session.user.id);
+          setProfile(profileData);
+        }
+
+        setLoading(false);
+      } catch (error) {
+        console.error("Error inesperado obteniendo sesión inicial:", error);
+        setLoading(false);
       }
-
-      setSession(session);
-      setUser(session?.user ?? null);
-
-      if (session?.user) {
-        const profileData = await loadProfile(session.user.id);
-        setProfile(profileData);
-      }
-
-      setLoading(false);
     };
 
     getInitialSession();
@@ -328,13 +344,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log("Cambio de estado de autenticación:", event, session ? "Sesión activa" : "Sin sesión");
+      
       setSession(session);
       setUser(session?.user ?? null);
 
       if (session?.user) {
+        console.log("Cargando perfil para usuario:", session.user.id);
         const profileData = await loadProfile(session.user.id);
         setProfile(profileData);
       } else {
+        console.log("Limpiando perfil - sin sesión");
         setProfile(null);
       }
 

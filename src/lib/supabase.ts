@@ -17,7 +17,9 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     // Configuración de autenticación
     autoRefreshToken: true,
     persistSession: true,
-    detectSessionInUrl: true
+    detectSessionInUrl: true,
+    // Configurar tiempo de expiración de sesión (24 horas)
+    flowType: 'pkce'
   },
   // Configuración adicional para mejor rendimiento
   realtime: {
