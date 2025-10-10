@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+import LocationAutocomplete from '@/components/ui/LocationAutocomplete'
+import { Location } from '@/lib/locationService'
 
 interface CreateMatchModalProps {
   isOpen: boolean
@@ -64,7 +66,6 @@ export default function CreateMatchModal({ isOpen, onClose, onSubmit, userId }: 
           )
         `)
         .eq('user_id', userId)
-        .eq('role', 'admin')
 
       if (error) throw error
 
@@ -143,6 +144,28 @@ export default function CreateMatchModal({ isOpen, onClose, onSubmit, userId }: 
     }
   }
 
+  const handleLocationSelect = (location: Location | null) => {
+    if (location) {
+      setFormData(prev => ({
+        ...prev,
+        location_name: location.display_name,
+        latitude: location.latitude || null,
+        longitude: location.longitude || null
+      }))
+      // Clear location error if it exists
+      if (errors.location_name) {
+        setErrors(prev => ({ ...prev, location_name: undefined }))
+      }
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        location_name: '',
+        latitude: null,
+        longitude: null
+      }))
+    }
+  }
+
   const handleInputChange = (field: keyof MatchFormData, value: string | number | boolean | null) => {
     setFormData(prev => ({ ...prev, [field]: value }))
     // Clear error when user starts typing
@@ -202,7 +225,7 @@ export default function CreateMatchModal({ isOpen, onClose, onSubmit, userId }: 
             )}
             {userGroups.length === 0 && (
               <p className="text-warning text-sm mt-1 font-open-sans">
-                Solo puedes crear partidos en grupos donde eres administrador
+                Únete a un grupo para poder crear partidos
               </p>
             )}
           </div>
@@ -229,12 +252,12 @@ export default function CreateMatchModal({ isOpen, onClose, onSubmit, userId }: 
             <label className="block text-sm font-medium text-text-main font-open-sans mb-2">
               Ubicación *
             </label>
-            <input
-              type="text"
+            <LocationAutocomplete
               value={formData.location_name}
-              onChange={(e) => handleInputChange('location_name', e.target.value)}
-              className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-accent-primary focus:border-transparent bg-bg-main text-text-main font-open-sans"
-              placeholder="Ej: Club Deportivo Central"
+              onChange={handleLocationSelect}
+              placeholder="Buscar ubicación del partido..."
+              className="w-full"
+              showCountryFlags={true}
             />
             {errors.location_name && (
               <p className="text-error text-sm mt-1 font-open-sans">{errors.location_name}</p>

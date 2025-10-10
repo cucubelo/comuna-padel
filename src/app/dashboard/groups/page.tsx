@@ -60,12 +60,24 @@ export default function GroupsPage() {
 
   useEffect(() => {
     const tabParam = searchParams.get('tab')
+    const createParam = searchParams.get('create')
+    
     if (tabParam === 'recommended' || tabParam === 'discover' || tabParam === 'my-groups') {
       // Map old 'recommended' to new 'recommended' for backward compatibility
       const mappedTab = tabParam === 'discover' ? 'recommended' : tabParam
       setActiveTab(mappedTab as 'recommended' | 'my-groups')
     }
-  }, [searchParams])
+    
+    // Open create modal if create parameter is present
+    if (createParam === 'true') {
+      setIsCreateModalOpen(true)
+      // Remove the create parameter from URL to clean it up
+      const newSearchParams = new URLSearchParams(searchParams.toString())
+      newSearchParams.delete('create')
+      const newUrl = `${window.location.pathname}?${newSearchParams.toString()}`
+      router.replace(newUrl)
+    }
+  }, [searchParams, router])
 
   const fetchUserGroups = useCallback(async () => {
     if (!user) return

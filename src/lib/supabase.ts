@@ -31,42 +31,145 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 export type Database = {
   public: {
     Tables: {
-      profiles: {
+      countries: {
         Row: {
           id: string
-          username: string | null
-          email: string
-          full_name: string | null
-          avatar_url: string | null
-          phone: string | null
-          location: string | null
-          bio: string | null
-          skill_level: number | null
-          preferred_position: 'left' | 'right' | 'both' | null
-          subscription_status: 'free' | 'premium' | 'pro'
+          country_code: string
+          country_name: string
+          flag_emoji: string | null
           created_at: string
           updated_at: string | null
-          matches_played: number
-          matches_won: number
-          matches_lost: number
         }
         Insert: {
-          id: string
-          username?: string | null
-          email: string
-          full_name?: string | null
-          avatar_url?: string | null
-          phone?: string | null
-          location?: string | null
-          bio?: string | null
-          skill_level?: number | null
-          preferred_position?: 'left' | 'right' | 'both' | null
-          subscription_status?: 'free' | 'premium' | 'pro'
+          id?: string
+          country_code: string
+          country_name: string
+          flag_emoji?: string | null
           created_at?: string
           updated_at?: string | null
-          matches_played?: number
-          matches_won?: number
-          matches_lost?: number
+        }
+        Update: {
+          id?: string
+          country_code?: string
+          country_name?: string
+          flag_emoji?: string | null
+          updated_at?: string | null
+        }
+      }
+      postal_codes: {
+        Row: {
+          id: string
+          postal_code: string
+          country_code: string
+          place_name: string
+          admin_name1: string | null
+          admin_name2: string | null
+          admin_name3: string | null
+          admin_code1: string | null
+          admin_code2: string | null
+          admin_code3: string | null
+          latitude: number | null
+          longitude: number | null
+          search_count: number | null
+          created_at: string
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          postal_code: string
+          country_code: string
+          place_name: string
+          admin_name1?: string | null
+          admin_name2?: string | null
+          admin_name3?: string | null
+          admin_code1?: string | null
+          admin_code2?: string | null
+          admin_code3?: string | null
+          latitude?: number | null
+          longitude?: number | null
+          search_count?: number | null
+          created_at?: string
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          postal_code?: string
+          country_code?: string
+          place_name?: string
+          admin_name1?: string | null
+          admin_name2?: string | null
+          admin_name3?: string | null
+          admin_code1?: string | null
+          admin_code2?: string | null
+          admin_code3?: string | null
+          latitude?: number | null
+          longitude?: number | null
+          search_count?: number | null
+          updated_at?: string | null
+        }
+      }
+       profiles: {
+          Row: {
+            id: string
+            username: string | null
+            email: string
+            full_name: string | null
+            avatar_url: string | null
+            phone: string | null
+            location: string | null
+            postal_code: string | null
+            place_name: string | null
+            admin_name1: string | null
+            admin_name2: string | null
+            admin_name3: string | null
+            admin_code1: string | null
+            admin_code2: string | null
+            admin_code3: string | null
+            city: string | null
+            country: string | null
+            country_code: string | null
+            latitude: number | null
+            longitude: number | null
+            bio: string | null
+            skill_level: number | null
+            preferred_position: 'left' | 'right' | 'both' | null
+            subscription_status: 'free' | 'premium' | 'pro'
+            created_at: string
+            updated_at: string | null
+            matches_played: number
+            matches_won: number
+            matches_lost: number
+          }
+          Insert: {
+            id: string
+            username?: string | null
+            email: string
+            full_name?: string | null
+            avatar_url?: string | null
+            phone?: string | null
+            location?: string | null
+            postal_code?: string | null
+            place_name?: string | null
+            admin_name1?: string | null
+            admin_name2?: string | null
+            admin_name3?: string | null
+            admin_code1?: string | null
+            admin_code2?: string | null
+            admin_code3?: string | null
+            city?: string | null
+            country?: string | null
+            country_code?: string | null
+            latitude?: number | null
+            longitude?: number | null
+            bio?: string | null
+            skill_level?: number | null
+            preferred_position?: 'left' | 'right' | 'both' | null
+            subscription_status?: 'free' | 'premium' | 'pro'
+            created_at?: string
+            updated_at?: string | null
+            matches_played?: number
+            matches_won?: number
+            matches_lost?: number
         }
         Update: {
           id?: string
@@ -76,6 +179,19 @@ export type Database = {
           avatar_url?: string | null
           phone?: string | null
           location?: string | null
+          postal_code?: string | null
+          place_name?: string | null
+          admin_name1?: string | null
+          admin_name2?: string | null
+          admin_name3?: string | null
+          admin_code1?: string | null
+          admin_code2?: string | null
+          admin_code3?: string | null
+          city?: string | null
+          country?: string | null
+          country_code?: string | null
+          latitude?: number | null
+          longitude?: number | null
           bio?: string | null
           skill_level?: number | null
           preferred_position?: 'left' | 'right' | 'both' | null

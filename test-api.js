@@ -1,0 +1,1 @@
+console.log("Testing Nominatim API..."); fetch("https://nominatim.openstreetmap.org/search?q=madrid&format=json&addressdetails=1&limit=3&accept-language=es&countrycodes=es", {headers: {"User-Agent": "Comuna-Padel-App/1.0"}}).then(r => r.json()).then(d => console.log("API Response:", d)).catch(e => console.error("API Error:", e));

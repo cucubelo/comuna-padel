@@ -3,6 +3,9 @@
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { Database } from '@/lib/supabase'
+import PostalCodeAutocomplete from '@/components/ui/PostalCodeAutocomplete'
+import { PostalCode } from '@/lib/postalCodeService'
+import { getCountryByCode, getAllCountries, Country } from '@/lib/countryService'
 
 type SkillLevel = Database['public']['Enums']['skill_level']
 type PreferredPosition = Database['public']['Enums']['preferred_position']
@@ -44,27 +47,129 @@ export default function ProfileForm({ onSave, className = '', showHeader = true 
     skillLevel: 'beginner' as SkillLevel,
     preferredPosition: 'both' as PreferredPosition,
     bio: '',
-    location: ''
+    postalCode: '',
+    placeName: '',
+    adminName1: '',
+    adminName2: '',
+    adminName3: '',
+    adminCode1: '',
+    adminCode2: '',
+    adminCode3: '',
+    latitude: null as number | null,
+    longitude: null as number | null,
+    city: '',
+    country: '',
+    countryCode: ''
   })
   
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [hasChanges, setHasChanges] = useState(false)
+  const [countries, setCountries] = useState<Country[]>([])
+
+  // Cargar países disponibles
+  useEffect(() => {
+    const loadCountries = async () => {
+      try {
+        const countriesData = await getAllCountries()
+        setCountries(countriesData)
+      } catch (error) {
+        console.error('Error cargando países:', error)
+      }
+    }
+    
+    loadCountries()
+  }, [])
 
   // Cargar datos del perfil cuando esté disponible
   useEffect(() => {
-    if (profile) {
-      setFormData({
-        fullName: profile.full_name || '',
-        phone: profile.phone || '',
-        skillLevel: skillLevelToString(profile.skill_level),
-        preferredPosition: profile.preferred_position || 'both',
-        bio: profile.bio || '',
-        location: profile.location || ''
-      })
+    const loadProfileData = async () => {
+      if (profile) {
+        let countryName = profile.country || '';
+        
+        // Si tenemos country_code pero no country, buscar el nombre del país
+        if (profile.country_code && !profile.country) {
+          try {
+            const countryData = await getCountryByCode(profile.country_code);
+            countryName = countryData?.country_name || '';
+          } catch (error) {
+            console.error('Error obteniendo nombre del país:', error);
+          }
+        }
+        
+        setFormData({
+          fullName: profile.full_name || '',
+          phone: profile.phone || '',
+          skillLevel: skillLevelToString(profile.skill_level),
+          preferredPosition: profile.preferred_position || 'both',
+          bio: profile.bio || '',
+          postalCode: profile.postal_code || '',
+          placeName: profile.place_name || '',
+          adminName1: profile.admin_name1 || '',
+          adminName2: profile.admin_name2 || '',
+          adminName3: profile.admin_name3 || '',
+          adminCode1: profile.admin_code1 || '',
+          adminCode2: profile.admin_code2 || '',
+          adminCode3: profile.admin_code3 || '',
+          latitude: profile.latitude || null,
+          longitude: profile.longitude || null,
+          city: profile.city || '',
+          country: countryName,
+          countryCode: profile.country_code || ''
+        })
+        
+        // Resetear estados de cambios y mensajes cuando se cargan los datos
+        setHasChanges(false)
+        setError(null)
+        setSuccess(null)
+      }
     }
+    
+    loadProfileData()
   }, [profile])
+
+  // Efecto adicional para asegurar que los datos se carguen al montar el componente
+  useEffect(() => {
+    if (profile && formData.fullName === '' && formData.country === '') {
+      const loadProfileData = async () => {
+        let countryName = profile.country || '';
+        
+        // Si tenemos country_code pero no country, buscar el nombre del país
+        if (profile.country_code && !profile.country) {
+          try {
+            const countryData = await getCountryByCode(profile.country_code);
+            countryName = countryData?.country_name || '';
+          } catch (error) {
+            console.error('Error obteniendo nombre del país:', error);
+          }
+        }
+        
+        setFormData({
+          fullName: profile.full_name || '',
+          phone: profile.phone || '',
+          skillLevel: skillLevelToString(profile.skill_level),
+          preferredPosition: profile.preferred_position || 'both',
+          bio: profile.bio || '',
+          postalCode: profile.postal_code || '',
+          placeName: profile.place_name || '',
+          adminName1: profile.admin_name1 || '',
+          adminName2: profile.admin_name2 || '',
+          adminName3: profile.admin_name3 || '',
+          adminCode1: profile.admin_code1 || '',
+          adminCode2: profile.admin_code2 || '',
+          adminCode3: profile.admin_code3 || '',
+          latitude: profile.latitude || null,
+          longitude: profile.longitude || null,
+          city: profile.city || '',
+          country: countryName,
+          countryCode: profile.country_code || ''
+        })
+      }
+      
+      loadProfileData()
+    }
+  }, [profile, formData.fullName, formData.country]) // Incluir todas las dependencias necesarias
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
@@ -77,6 +182,43 @@ export default function ProfileForm({ onSave, className = '', showHeader = true 
     setSuccess(null)
   }
 
+  const handlePostalCodeSelect = async (postalCode: PostalCode | null) => {
+    let countryName = '';
+    
+    if (postalCode && postalCode.country_code) {
+      try {
+        const countryData = await getCountryByCode(postalCode.country_code);
+        countryName = countryData?.country_name || '';
+      } catch (error) {
+        console.error('Error obteniendo nombre del país:', error);
+        // Fallback: usar admin_name1 como antes
+        countryName = postalCode.admin_name1 || postalCode.admin_name2 || '';
+      }
+    }
+    
+    setFormData(prev => ({
+      ...prev,
+      postalCode: postalCode ? postalCode.postal_code : '',
+      placeName: postalCode ? postalCode.place_name : '',
+      adminName1: postalCode ? postalCode.admin_name1 || '' : '',
+      adminName2: postalCode ? postalCode.admin_name2 || '' : '',
+      adminName3: postalCode ? postalCode.admin_name3 || '' : '',
+      adminCode1: postalCode ? postalCode.admin_code1 || '' : '',
+      adminCode2: postalCode ? postalCode.admin_code2 || '' : '',
+      adminCode3: postalCode ? postalCode.admin_code3 || '' : '',
+      latitude: postalCode ? postalCode.latitude || null : null,
+      longitude: postalCode ? postalCode.longitude || null : null,
+      city: postalCode ? postalCode.place_name : '',
+      country: countryName,
+      countryCode: postalCode ? postalCode.country_code : ''
+    }))
+    setHasChanges(true)
+    setError(null)
+    setSuccess(null)
+  }
+
+
+
   const validateForm = () => {
     if (!formData.fullName.trim()) {
       return 'El nombre completo es obligatorio'
@@ -84,6 +226,22 @@ export default function ProfileForm({ onSave, className = '', showHeader = true 
 
     if (formData.phone && !/^\+?[\d\s\-\(\)]+$/.test(formData.phone)) {
       return 'Por favor, ingresa un número de teléfono válido'
+    }
+
+    // Validación cruzada: si hay código postal, debe coincidir con el país seleccionado
+    if (formData.postalCode && formData.countryCode) {
+      // Verificar que el código postal pertenece al país seleccionado
+      // Esta validación se basa en que cuando se selecciona un código postal,
+      // automáticamente se actualiza el país correspondiente
+      if (formData.postalCode && !formData.placeName) {
+        return 'El código postal ingresado no es válido o no se encontró información de ubicación'
+      }
+    }
+
+    // Si hay país seleccionado pero no hay código postal, es válido
+    // Si hay código postal, debe tener datos de ubicación asociados
+    if (formData.postalCode && (!formData.city && !formData.placeName)) {
+      return 'Por favor, selecciona un código postal válido de la lista de sugerencias'
     }
 
     return null
@@ -103,16 +261,52 @@ export default function ProfileForm({ onSave, className = '', showHeader = true 
     }
 
     try {
+      console.log('Enviando datos del perfil:', {
+        full_name: formData.fullName.trim(),
+        phone: formData.phone.trim() || null,
+        skill_level: skillLevelToNumber(formData.skillLevel),
+        preferred_position: formData.preferredPosition,
+        bio: formData.bio.trim() || null,
+        postal_code: formData.postalCode.trim() || null,
+        place_name: formData.placeName.trim() || null,
+        admin_name1: formData.adminName1.trim() || null,
+        admin_name2: formData.adminName2.trim() || null,
+        admin_name3: formData.adminName3.trim() || null,
+        admin_code1: formData.adminCode1.trim() || null,
+        admin_code2: formData.adminCode2.trim() || null,
+        admin_code3: formData.adminCode3.trim() || null,
+        latitude: formData.latitude,
+        longitude: formData.longitude,
+        city: formData.city.trim() || null,
+        country: formData.country.trim() || null,
+        country_code: formData.countryCode.trim() || null
+      })
+
       const { error } = await updateProfile({
         full_name: formData.fullName.trim(),
         phone: formData.phone.trim() || null,
         skill_level: skillLevelToNumber(formData.skillLevel),
         preferred_position: formData.preferredPosition,
         bio: formData.bio.trim() || null,
-        location: formData.location.trim() || null
+        postal_code: formData.postalCode.trim() || null,
+        place_name: formData.placeName.trim() || null,
+        admin_name1: formData.adminName1.trim() || null,
+        admin_name2: formData.adminName2.trim() || null,
+        admin_name3: formData.adminName3.trim() || null,
+        admin_code1: formData.adminCode1.trim() || null,
+        admin_code2: formData.adminCode2.trim() || null,
+        admin_code3: formData.adminCode3.trim() || null,
+        latitude: formData.latitude,
+        longitude: formData.longitude,
+        city: formData.city.trim() || null,
+        country: formData.country.trim() || null,
+        country_code: formData.countryCode.trim() || null
       })
 
+      console.log('Resultado de updateProfile:', { error })
+
       if (error) {
+        console.error('Error detallado:', error)
         setError(error.message || 'Error al actualizar el perfil')
       } else {
         setSuccess('Perfil actualizado exitosamente')
@@ -122,22 +316,46 @@ export default function ProfileForm({ onSave, className = '', showHeader = true 
         }
       }
     } catch (err) {
+      console.error('Error inesperado:', err)
       setError('Error inesperado. Inténtalo de nuevo.')
-      console.error('Error actualizando perfil:', err)
     } finally {
       setLoading(false)
     }
   }
 
-  const handleReset = () => {
+  const handleReset = async () => {
     if (profile) {
+      let countryName = profile.country || '';
+      
+      // Si tenemos country_code pero no country, buscar el nombre del país
+      if (profile.country_code && !profile.country) {
+        try {
+          const countryData = await getCountryByCode(profile.country_code);
+          countryName = countryData?.country_name || '';
+        } catch (error) {
+          console.error('Error obteniendo nombre del país:', error);
+        }
+      }
+      
       setFormData({
         fullName: profile.full_name || '',
         phone: profile.phone || '',
         skillLevel: skillLevelToString(profile.skill_level),
         preferredPosition: profile.preferred_position || 'both',
         bio: profile.bio || '',
-        location: profile.location || ''
+        postalCode: profile.postal_code || '',
+        placeName: profile.place_name || '',
+        adminName1: profile.admin_name1 || '',
+        adminName2: profile.admin_name2 || '',
+        adminName3: profile.admin_name3 || '',
+        adminCode1: profile.admin_code1 || '',
+        adminCode2: profile.admin_code2 || '',
+        adminCode3: profile.admin_code3 || '',
+        latitude: profile.latitude || null,
+        longitude: profile.longitude || null,
+        city: profile.city || '',
+        country: countryName,
+        countryCode: profile.country_code || ''
       })
       setHasChanges(false)
       setError(null)
@@ -264,20 +482,94 @@ export default function ProfileForm({ onSave, className = '', showHeader = true 
           </div>
 
           {/* Ubicación */}
-          <div>
-            <label htmlFor="location" className="block text-sm font-semibold text-text-main mb-2 font-open-sans">
-              Ubicación
-            </label>
-            <input
-              id="location"
-              name="location"
-              type="text"
-              value={formData.location}
-              onChange={handleInputChange}
-              className="w-full px-4 py-3 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-accent-primary focus:border-transparent transition-colors font-open-sans bg-bg-main text-text-main"
-              placeholder="Ciudad, País"
-              disabled={loading}
-            />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label htmlFor="country" className="block text-sm font-semibold text-text-main mb-2 font-open-sans">
+                País
+              </label>
+              <select
+                id="country"
+                name="countryCode"
+                value={formData.countryCode}
+                onChange={(e) => {
+                  const selectedCountry = countries.find(c => c.country_code === e.target.value)
+                  setFormData(prev => ({
+                    ...prev,
+                    countryCode: e.target.value,
+                    country: selectedCountry?.country_name || '',
+                    // Limpiar datos de ubicación cuando se cambia el país manualmente
+                    postalCode: '',
+                    placeName: '',
+                    city: '',
+                    adminName1: '',
+                    adminName2: '',
+                    adminName3: '',
+                    adminCode1: '',
+                    adminCode2: '',
+                    adminCode3: '',
+                    latitude: null,
+                    longitude: null
+                  }))
+                  setHasChanges(true)
+                  setError(null)
+                  setSuccess(null)
+                }}
+                className="w-full px-4 py-3 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-accent-primary focus:border-transparent transition-colors font-open-sans bg-bg-main text-text-main"
+                disabled={loading}
+              >
+                <option value="">Selecciona un país</option>
+                {countries.map((country) => (
+                  <option key={country.country_code} value={country.country_code}>
+                    {country.flag_emoji ? `${country.flag_emoji} ` : ''}{country.country_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            
+            <div>
+            
+              <PostalCodeAutocomplete
+                value={formData.postalCode ? `${formData.postalCode} - ${formData.placeName || formData.city}, ${formData.adminName1 || formData.country}` : ''}
+                countryCode={formData.countryCode}
+                onChange={handlePostalCodeSelect}
+                placeholder="Ingresa tu código postal..."
+                className="w-full"
+                disabled={loading}
+                showCountrySelector={false}
+              />
+              
+              {/* Indicador de ubicación seleccionada */}
+              {formData.postalCode && formData.placeName && (
+                <div className="mt-2 p-3 bg-bg-secondary border border-accent-primary/20 rounded-md">
+                  <div className="flex items-center text-sm text-accent-primary">
+                    <svg className="w-4 h-4 mr-2 text-accent-primary" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
+                    <span className="font-semibold font-montserrat">Ubicación confirmada</span>
+                  </div>
+                  <div className="text-sm text-text-secondary mt-1 font-open-sans">
+                    {formData.postalCode} - {formData.placeName || formData.city}
+                    {formData.adminName1 && `, ${formData.adminName1}`}
+                    {formData.country && `, ${formData.country}`}
+                  </div>
+                </div>
+              )}
+              
+              {/* Indicador cuando solo hay código postal sin ubicación */}
+              {formData.postalCode && !formData.placeName && (
+                <div className="mt-2 p-3 bg-bg-secondary border border-accent-secondary/20 rounded-md">
+                  <div className="flex items-center text-sm text-accent-secondary">
+                    <svg className="w-4 h-4 mr-2 text-accent-secondary" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                    <span className="font-semibold font-montserrat">Código postal no válido</span>
+                  </div>
+                  <div className="text-sm text-text-secondary mt-1 font-open-sans">
+                    Por favor, selecciona un código postal de la lista de sugerencias
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Información de padel */}

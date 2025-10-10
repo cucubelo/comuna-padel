@@ -57,7 +57,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
             {/* Actions: Create group + Avatar + Mobile menu toggle */}
             <div className="flex items-center gap-4">
-              <Link href="/dashboard/groups?tab=my-groups" className="bg-accent-primary text-bg-main px-4 py-2 rounded-md hover:bg-accent-primary/90 transition-colors font-semibold font-open-sans hidden sm:inline-block">
+              <Link href="/dashboard/groups?tab=my-groups&create=true" className="bg-accent-primary text-bg-main px-4 py-2 rounded-md hover:bg-accent-primary/90 transition-colors font-semibold font-open-sans hidden sm:inline-block">
                 Crear Grupo
               </Link>
               <Link href="/dashboard/profile" className="flex items-center gap-2">

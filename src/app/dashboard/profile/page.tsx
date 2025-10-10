@@ -93,15 +93,15 @@ export default function ProfilePage() {
   })
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
-  const [userStats, setUserStats] = useState({ played: 24, wins: 16, losses: 8 })
-  const [recentMatches, setRecentMatches] = useState<RecentMatch[]>([
+  const [userStats] = useState({ played: 24, wins: 16, losses: 8 })
+  const [recentMatches] = useState<RecentMatch[]>([
     { opponent: 'Carlos M.', resultLabel: '6-4, 6-2', outcome: 'win' },
     { opponent: 'Ana L.', resultLabel: '4-6, 6-3, 6-4', outcome: 'win' },
     { opponent: 'Miguel R.', resultLabel: '6-7, 4-6', outcome: 'loss' },
     { opponent: 'Sofia P.', resultLabel: '6-3, 6-1', outcome: 'win' },
     { opponent: 'Diego F.', resultLabel: '5-7, 6-4, 4-6', outcome: 'loss' }
   ])
-  const [myGroups, setMyGroups] = useState<UserGroup[]>([
+  const [myGroups] = useState<UserGroup[]>([
     { name: 'Club Norte', members: 23 },
     { name: 'Amigos Pádel', members: 12 },
     { name: 'Weekend Squad', members: 8 },
@@ -110,7 +110,6 @@ export default function ProfilePage() {
 
   const loadUserSettings = useCallback(async () => {
     try {
-      console.log('Configuraciones de usuario cargadas con valores por defecto')
       if (profile?.avatar_url) {
         setAvatarUrl(profile.avatar_url)
       }
@@ -127,7 +126,6 @@ export default function ProfilePage() {
 
   const saveNotificationSettings = async () => {
     try {
-      console.log('Configuración de notificaciones guardada (simulado)')
       alert('Configuración de notificaciones guardada')
     } catch (error) {
       console.error('Error saving notification settings:', error)
@@ -137,7 +135,6 @@ export default function ProfilePage() {
 
   const saveGamePreferences = async () => {
     try {
-      console.log('Preferencias de juego guardadas (simulado)')
       alert('Preferencias de juego guardadas')
     } catch (error) {
       console.error('Error saving game preferences:', error)
