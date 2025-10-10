@@ -276,7 +276,7 @@ export default function StatsPage() {
                 onClick={() => setTimeRange(key as '3m' | '6m' | '1y' | 'all')}
                 className={`px-3 py-2 rounded-lg font-open-sans font-medium transition-colors ${
                   timeRange === key
-                    ? 'bg-accent-primary text-white'
+                    ? 'bg-accent-primary text-bg-main'
                     : 'bg-bg-secondary text-text-secondary hover:text-text-main border border-border'
                 }`}
               >

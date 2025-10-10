@@ -322,7 +322,7 @@ export default function MatchesPage() {
           </div>
           <button
             onClick={() => setIsCreateModalOpen(true)}
-            className="mt-4 sm:mt-0 bg-accent-primary text-white px-6 py-3 rounded-lg hover:bg-accent-primary/90 transition-colors font-open-sans font-medium shadow-lg"
+            className="mt-4 sm:mt-0 bg-accent-primary text-bg-main px-6 py-3 rounded-lg hover:bg-accent-primary/90 transition-colors font-open-sans font-medium shadow-lg"
           >
             + Crear Partido
           </button>
@@ -360,7 +360,7 @@ export default function MatchesPage() {
                 onClick={() => setFilter(key as FilterType)}
                 className={`px-4 py-2 rounded-lg font-open-sans font-medium transition-colors ${
                   filter === key
-                    ? 'bg-accent-primary text-white'
+                    ? 'bg-accent-primary text-bg-main'
                     : 'bg-bg-main text-text-secondary hover:text-text-main border border-border'
                 }`}
               >
@@ -375,7 +375,7 @@ export default function MatchesPage() {
               onClick={() => setView('list')}
               className={`px-4 py-2 rounded-lg font-open-sans font-medium transition-colors ${
                 view === 'list'
-                  ? 'bg-accent-primary text-white'
+                  ? 'bg-accent-primary text-bg-main'
                   : 'bg-bg-main text-text-secondary hover:text-text-main border border-border'
               }`}
             >
@@ -388,7 +388,7 @@ export default function MatchesPage() {
               onClick={() => setView('calendar')}
               className={`px-4 py-2 rounded-lg font-open-sans font-medium transition-colors ${
                 view === 'calendar'
-                  ? 'bg-accent-primary text-white'
+                  ? 'bg-accent-primary text-bg-main'
                   : 'bg-bg-main text-text-secondary hover:text-text-main border border-border'
               }`}
             >
@@ -448,7 +448,7 @@ export default function MatchesPage() {
                 {filter !== 'my_matches' && (
                   <button
                     onClick={() => setIsCreateModalOpen(true)}
-                    className="bg-accent-primary text-white px-6 py-2 rounded-lg hover:bg-accent-primary/90 transition-colors font-open-sans"
+                    className="bg-accent-primary text-bg-main px-6 py-2 rounded-lg hover:bg-accent-primary/90 transition-colors font-open-sans"
                   >
                     Crear Primer Partido
                   </button>

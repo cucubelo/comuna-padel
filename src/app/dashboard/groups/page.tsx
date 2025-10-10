@@ -374,7 +374,7 @@ export default function GroupsPage() {
               </div>
               <button
                 onClick={() => setIsCreateModalOpen(true)}
-                className="bg-accent-primary text-white px-6 py-3 rounded-lg font-semibold hover:bg-accent-primary/90 transition-colors font-open-sans flex items-center gap-2"
+                className="bg-accent-primary text-bg-main px-6 py-3 rounded-lg font-semibold hover:bg-accent-primary/90 transition-colors font-open-sans flex items-center gap-2"
               >
                 <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
@@ -457,7 +457,7 @@ export default function GroupsPage() {
                           filtersSection.scrollIntoView({ behavior: 'smooth' })
                         }
                       }}
-                      className="w-full bg-accent-primary hover:bg-accent-primary/90 text-white px-4 py-3 rounded-lg font-medium font-open-sans transition-colors flex items-center justify-center gap-2 shadow-sm"
+                      className="w-full bg-accent-primary hover:bg-accent-primary/90 text-bg-main px-4 py-3 rounded-lg font-medium font-open-sans transition-colors flex items-center justify-center gap-2 shadow-sm"
                     >
                       <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.207A1 1 0 013 6.5V4z" />
@@ -565,7 +565,7 @@ export default function GroupsPage() {
                       </p>
                       <button
                         onClick={() => setIsCreateModalOpen(true)}
-                        className="bg-accent-primary text-white px-6 py-2 rounded-lg font-medium hover:bg-accent-primary/90 transition-colors font-open-sans"
+                        className="bg-accent-primary text-bg-main px-6 py-2 rounded-lg font-medium hover:bg-accent-primary/90 transition-colors font-open-sans"
                       >
                         Crear Grupo
                       </button>

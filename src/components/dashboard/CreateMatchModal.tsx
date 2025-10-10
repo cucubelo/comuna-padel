@@ -323,7 +323,7 @@ export default function CreateMatchModal({ isOpen, onClose, onSubmit, userId }: 
             <button
               type="submit"
               disabled={isSubmitting || userGroups.length === 0}
-              className="flex-1 px-4 py-2 bg-accent-primary text-white rounded-lg hover:bg-accent-primary/90 transition-colors font-open-sans disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 px-4 py-2 bg-accent-primary text-bg-main rounded-lg hover:bg-accent-primary/90 transition-colors font-open-sans disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSubmitting ? 'Creando...' : 'Crear Partido'}
             </button>

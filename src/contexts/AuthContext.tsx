@@ -235,7 +235,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Intentar actualizar el perfil existente
       const { data, error } = await supabase
         .from("profiles")
-        .update(profileData)
+        .update({
+          ...profileData,
+          updated_at: new Date().toISOString()
+        })
         .eq("id", user.id)
         .select();
 

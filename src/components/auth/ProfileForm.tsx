@@ -6,6 +6,7 @@ import { Database } from '@/lib/supabase'
 import PostalCodeAutocomplete from '@/components/ui/PostalCodeAutocomplete'
 import { PostalCode } from '@/lib/postalCodeService'
 import { getCountryByCode, getAllCountries, Country } from '@/lib/countryService'
+import { useToast } from '@/contexts/ToastContext'
 
 type SkillLevel = Database['public']['Enums']['skill_level']
 type PreferredPosition = Database['public']['Enums']['preferred_position']
@@ -18,6 +19,7 @@ interface ProfileFormProps {
 
 export default function ProfileForm({ onSave, className = '', showHeader = true }: ProfileFormProps) {
   const { user, profile, updateProfile, loading: authLoading } = useAuth()
+  const { showSuccess, showError } = useToast()
   
   // Helper function to convert skill level number to string
   const skillLevelToString = (level: number | null): SkillLevel => {
@@ -45,7 +47,7 @@ export default function ProfileForm({ onSave, className = '', showHeader = true 
     fullName: '',
     phone: '',
     skillLevel: 'beginner' as SkillLevel,
-    preferredPosition: 'both' as PreferredPosition,
+    preferredPosition: '' as PreferredPosition | '',
     bio: '',
     postalCode: '',
     placeName: '',
@@ -63,8 +65,6 @@ export default function ProfileForm({ onSave, className = '', showHeader = true 
   })
   
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState<string | null>(null)
   const [hasChanges, setHasChanges] = useState(false)
   const [countries, setCountries] = useState<Country[]>([])
 
@@ -102,7 +102,7 @@ export default function ProfileForm({ onSave, className = '', showHeader = true 
           fullName: profile.full_name || '',
           phone: profile.phone || '',
           skillLevel: skillLevelToString(profile.skill_level),
-          preferredPosition: profile.preferred_position || 'both',
+          preferredPosition: profile.preferred_position || '',
           bio: profile.bio || '',
           postalCode: profile.postal_code || '',
           placeName: profile.place_name || '',
@@ -119,10 +119,8 @@ export default function ProfileForm({ onSave, className = '', showHeader = true 
           countryCode: profile.country_code || ''
         })
         
-        // Resetear estados de cambios y mensajes cuando se cargan los datos
-        setHasChanges(false)
-        setError(null)
-        setSuccess(null)
+        // Resetear estados de cambios cuando se cargan los datos
+         setHasChanges(false)
       }
     }
     
@@ -149,7 +147,7 @@ export default function ProfileForm({ onSave, className = '', showHeader = true 
           fullName: profile.full_name || '',
           phone: profile.phone || '',
           skillLevel: skillLevelToString(profile.skill_level),
-          preferredPosition: profile.preferred_position || 'both',
+          preferredPosition: profile.preferred_position || '',
           bio: profile.bio || '',
           postalCode: profile.postal_code || '',
           placeName: profile.place_name || '',
@@ -178,8 +176,6 @@ export default function ProfileForm({ onSave, className = '', showHeader = true 
       [name]: value
     }))
     setHasChanges(true)
-    setError(null)
-    setSuccess(null)
   }
 
   const handlePostalCodeSelect = async (postalCode: PostalCode | null) => {
@@ -213,8 +209,6 @@ export default function ProfileForm({ onSave, className = '', showHeader = true 
       countryCode: postalCode ? postalCode.country_code : ''
     }))
     setHasChanges(true)
-    setError(null)
-    setSuccess(null)
   }
 
 
@@ -250,12 +244,10 @@ export default function ProfileForm({ onSave, className = '', showHeader = true 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
-    setError(null)
-    setSuccess(null)
 
     const validationError = validateForm()
     if (validationError) {
-      setError(validationError)
+      showError(validationError)
       setLoading(false)
       return
     }
@@ -265,7 +257,7 @@ export default function ProfileForm({ onSave, className = '', showHeader = true 
         full_name: formData.fullName.trim(),
         phone: formData.phone.trim() || null,
         skill_level: skillLevelToNumber(formData.skillLevel),
-        preferred_position: formData.preferredPosition,
+        preferred_position: formData.preferredPosition === '' ? null : formData.preferredPosition,
         bio: formData.bio.trim() || null,
         postal_code: formData.postalCode.trim() || null,
         place_name: formData.placeName.trim() || null,
@@ -286,7 +278,7 @@ export default function ProfileForm({ onSave, className = '', showHeader = true 
         full_name: formData.fullName.trim(),
         phone: formData.phone.trim() || null,
         skill_level: skillLevelToNumber(formData.skillLevel),
-        preferred_position: formData.preferredPosition,
+        preferred_position: formData.preferredPosition === '' ? null : formData.preferredPosition,
         bio: formData.bio.trim() || null,
         postal_code: formData.postalCode.trim() || null,
         place_name: formData.placeName.trim() || null,
@@ -307,9 +299,9 @@ export default function ProfileForm({ onSave, className = '', showHeader = true 
 
       if (error) {
         console.error('Error detallado:', error)
-        setError(error.message || 'Error al actualizar el perfil')
+        showError(error.message || 'Error al actualizar el perfil')
       } else {
-        setSuccess('Perfil actualizado exitosamente')
+        showSuccess('Perfil actualizado exitosamente')
         setHasChanges(false)
         if (onSave) {
           onSave()
@@ -317,7 +309,7 @@ export default function ProfileForm({ onSave, className = '', showHeader = true 
       }
     } catch (err) {
       console.error('Error inesperado:', err)
-      setError('Error inesperado. Inténtalo de nuevo.')
+      showError('Error inesperado. Inténtalo de nuevo.')
     } finally {
       setLoading(false)
     }
@@ -358,8 +350,6 @@ export default function ProfileForm({ onSave, className = '', showHeader = true 
         countryCode: profile.country_code || ''
       })
       setHasChanges(false)
-      setError(null)
-      setSuccess(null)
     }
   }
 
@@ -387,7 +377,7 @@ export default function ProfileForm({ onSave, className = '', showHeader = true 
 
   return (
     <div className={`w-full max-w-2xl mx-auto ${className}`}>
-      <div className="bg-bg-main rounded-lg shadow-lg p-8 border border-border">
+      <div className="bg-bg-secondary rounded-lg border border-border p-6">
         {showHeader && (
           <div className="text-center mb-8">
             <h2 className="text-3xl font-bold text-text-main font-montserrat">
@@ -400,36 +390,6 @@ export default function ProfileForm({ onSave, className = '', showHeader = true 
         )}
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          {error && (
-            <div className="bg-bg-secondary border border-border rounded-md p-4">
-              <div className="flex">
-                <div className="flex-shrink-0">
-                  <svg className="h-5 w-5 text-red-500" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                  </svg>
-                </div>
-                <div className="ml-3">
-                  <p className="text-sm text-text-main font-open-sans">{error}</p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {success && (
-            <div className="bg-bg-secondary border border-border rounded-md p-4">
-              <div className="flex">
-                <div className="flex-shrink-0">
-                  <svg className="h-5 w-5 text-accent-primary" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                  </svg>
-                </div>
-                <div className="ml-3">
-                  <p className="text-sm text-text-main font-open-sans">{success}</p>
-                </div>
-              </div>
-            </div>
-          )}
-
           {/* Email (solo lectura) */}
           <div>
             <label className="block text-sm font-semibold text-text-main mb-2 font-open-sans">
@@ -511,8 +471,6 @@ export default function ProfileForm({ onSave, className = '', showHeader = true 
                     longitude: null
                   }))
                   setHasChanges(true)
-                  setError(null)
-                  setSuccess(null)
                 }}
                 className="w-full px-4 py-3 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-accent-primary focus:border-transparent transition-colors font-open-sans bg-bg-main text-text-main"
                 disabled={loading}
@@ -605,9 +563,10 @@ export default function ProfileForm({ onSave, className = '', showHeader = true 
                 className="w-full px-4 py-3 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-accent-primary focus:border-transparent transition-colors font-open-sans bg-bg-main text-text-main"
                 disabled={loading}
               >
-                <option value="both">Ambas</option>
+                <option value="">Selecciona tu posición preferida</option>
                 <option value="left">Izquierda (Drive)</option>
                 <option value="right">Derecha (Revés)</option>
+                <option value="both">Ambas</option>
               </select>
             </div>
           </div>

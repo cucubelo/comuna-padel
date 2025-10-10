@@ -274,7 +274,7 @@ export default function PlayersPage() {
                   </div>
 
                   <div className="mt-4 pt-4 border-t border-border">
-                    <button className="w-full bg-accent-primary text-white py-2 px-4 rounded-md hover:bg-accent-primary/90 transition-colors font-medium">
+                    <button className="w-full bg-accent-primary text-bg-main py-2 px-4 rounded-md hover:bg-accent-primary/90 transition-colors font-medium">
                       Enviar mensaje
                     </button>
                   </div>

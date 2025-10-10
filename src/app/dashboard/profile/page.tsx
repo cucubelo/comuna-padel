@@ -2,10 +2,12 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
+import { useSearchParams, useRouter } from 'next/navigation'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
 import ProfileForm from '@/components/auth/ProfileForm'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
+import { useToast } from '@/contexts/ToastContext'
 
 interface NotificationSettings {
   email_matches: boolean
@@ -75,7 +77,12 @@ const IconAvatar = () => (
 
 export default function ProfilePage() {
   const { user, profile } = useAuth()
+  const { showSuccess, showError } = useToast()
+  const searchParams = useSearchParams()
+  const router = useRouter()
   const [activeTab, setActiveTab] = useState<'overview' | 'profile' | 'preferences' | 'notifications' | 'avatar'>('overview')
+  const [showScrollHint, setShowScrollHint] = useState(true)
+  const [showLeftArrow, setShowLeftArrow] = useState(false)
   const [notifications, setNotifications] = useState<NotificationSettings>({
     email_matches: true,
     email_groups: true,
@@ -124,21 +131,37 @@ export default function ProfilePage() {
     }
   }, [user, loadUserSettings])
 
+  // Manejar navegación por URL
+  useEffect(() => {
+    const tabParam = searchParams.get('tab')
+    if (tabParam && ['overview', 'profile', 'preferences', 'notifications', 'avatar'].includes(tabParam)) {
+      setActiveTab(tabParam as 'overview' | 'profile' | 'preferences' | 'notifications' | 'avatar')
+    }
+  }, [searchParams])
+
+  // Función para cambiar tab y actualizar URL
+  const handleTabChange = (tab: 'overview' | 'profile' | 'preferences' | 'notifications' | 'avatar') => {
+    setActiveTab(tab)
+    const newSearchParams = new URLSearchParams(searchParams.toString())
+    newSearchParams.set('tab', tab)
+    router.push(`/dashboard/profile?${newSearchParams.toString()}`, { scroll: false })
+  }
+
   const saveNotificationSettings = async () => {
     try {
-      alert('Configuración de notificaciones guardada')
+      showSuccess('Configuración de notificaciones guardada correctamente')
     } catch (error) {
       console.error('Error saving notification settings:', error)
-      alert('Error al guardar la configuración')
+      showError('Error al guardar la configuración de notificaciones')
     }
   }
 
   const saveGamePreferences = async () => {
     try {
-      alert('Preferencias de juego guardadas')
+      showSuccess('Preferencias de juego guardadas correctamente')
     } catch (error) {
       console.error('Error saving game preferences:', error)
-      alert('Error al guardar las preferencias')
+      showError('Error al guardar las preferencias de juego')
     }
   }
 
@@ -177,10 +200,10 @@ export default function ProfilePage() {
       }
 
       setAvatarUrl(data.publicUrl)
-      alert('Avatar actualizado correctamente')
+      showSuccess('Avatar actualizado correctamente')
     } catch (error) {
       console.error('Error uploading avatar:', error)
-      alert('Error al subir avatar')
+      showError('Error al subir el avatar')
     } finally {
       setUploading(false)
     }
@@ -189,7 +212,6 @@ export default function ProfilePage() {
   return (
     <ProtectedRoute>
       <div className="min-h-screen bg-bg-secondary">
-
         {/* Main Content */}
         <main className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8">
           {/* Hero compacto */}
@@ -205,9 +227,75 @@ export default function ProfilePage() {
             </div>
           </section>
       
-          {/* Layout con sidebar fijo */}
-          <div className="flex gap-4">
-            {/* Sidebar fijo independiente */}
+          {/* Layout responsivo mejorado */}
+          <div className="flex flex-col md:flex-row gap-4">
+            {/* Sidebar móvil - arriba del contenido */}
+            <div className="md:hidden w-full mb-4">
+              <div className="bg-bg-main rounded-xl border border-border p-2 shadow-sm relative">
+                {/* Indicador de scroll izquierdo - visible cuando se puede scrollear hacia la izquierda */}
+                {showLeftArrow && (
+                  <div className="absolute left-0 top-0 bottom-0 w-12 z-10 pointer-events-none flex items-center justify-start">
+                    <div className="bg-white/90 backdrop-blur-sm rounded-full p-1 shadow-lg border border-gray-200/50 ml-1">
+                      <svg className="w-3 h-3 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                      </svg>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Indicador de scroll derecho - visible cuando hay contenido oculto */}
+                {showScrollHint && (
+                  <div className="absolute right-0 top-0 bottom-0 w-12 z-10 pointer-events-none flex items-center justify-end">
+                    <div className="bg-white/90 backdrop-blur-sm rounded-full p-1 shadow-lg border border-gray-200/50 mr-1">
+                      <svg className="w-3 h-3 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </div>
+                  </div>
+                )}
+                
+                <div 
+                  className="flex gap-1 overflow-x-auto scrollbar-hide scroll-smooth"
+                  onScroll={(e) => {
+                    const container = e.currentTarget
+                    const scrollLeft = container.scrollLeft
+                    const scrollWidth = container.scrollWidth
+                    const clientWidth = container.clientWidth
+                    
+                    // Mostrar flecha derecha si no está al final y hay contenido oculto
+                    const hasHiddenContentRight = scrollLeft < (scrollWidth - clientWidth - 10)
+                    setShowScrollHint(hasHiddenContentRight)
+                    
+                    // Mostrar flecha izquierda si no está al inicio
+                    const hasHiddenContentLeft = scrollLeft > 10
+                    setShowLeftArrow(hasHiddenContentLeft)
+                  }}
+                >
+                  {[
+                    { id: 'overview', label: 'Resumen', icon: <IconOverview /> },
+                    { id: 'profile', label: 'Información Personal', icon: <IconProfile /> },
+                    { id: 'preferences', label: 'Preferencias', icon: <IconPreferences /> },
+                    { id: 'notifications', label: 'Notificaciones', icon: <IconNotifications /> },
+                    { id: 'avatar', label: 'Avatar', icon: <IconAvatar /> }
+                  ].map((tab) => (
+                    <button
+                      key={tab.id}
+                      onClick={() => handleTabChange(tab.id as 'overview' | 'profile' | 'preferences' | 'notifications' | 'avatar')}
+                      className={`flex-shrink-0 px-3 py-2 rounded-lg transition-all flex items-center gap-2 text-xs font-medium ${
+                        activeTab === tab.id
+                          ? 'bg-accent-primary text-bg-main'
+                          : 'text-text-secondary hover:text-text-main hover:bg-bg-secondary'
+                      }`}
+                    >
+                      <span className="flex-shrink-0">{tab.icon}</span>
+                      <span className="whitespace-nowrap">{tab.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Sidebar desktop - al costado */}
             <aside className="hidden md:block w-56 flex-shrink-0">
               <div className="sticky top-4 bg-bg-main rounded-xl border border-border p-3 shadow-sm">
                 <nav className="space-y-1">
@@ -220,10 +308,10 @@ export default function ProfilePage() {
                   ].map((tab) => (
                     <button
                       key={tab.id}
-                      onClick={() => setActiveTab(tab.id as 'overview' | 'profile' | 'preferences' | 'notifications' | 'avatar')}
+                      onClick={() => handleTabChange(tab.id as 'overview' | 'profile' | 'preferences' | 'notifications' | 'avatar')}
                       className={`w-full text-left px-3 py-2.5 rounded-lg transition-all flex items-center gap-3 group text-sm font-medium ${
                         activeTab === tab.id
-                          ? 'bg-accent-primary text-white shadow-sm'
+                          ? 'bg-accent-primary text-bg-main shadow-sm'
                           : 'text-text-secondary hover:text-text-main hover:bg-bg-secondary'
                       }`}
                     >
@@ -235,46 +323,23 @@ export default function ProfilePage() {
               </div>
             </aside>
 
-            {/* Sidebar móvil */}
-            <div className="md:hidden mb-4">
-              <div className="bg-bg-main rounded-xl border border-border p-2 shadow-sm">
-                <div className="flex gap-1 overflow-x-auto">
-                  {[
-                    { id: 'overview', label: 'Resumen', icon: <IconOverview /> },
-                    { id: 'profile', label: 'Info', icon: <IconProfile /> },
-                    { id: 'preferences', label: 'Pref', icon: <IconPreferences /> },
-                    { id: 'notifications', label: 'Notif', icon: <IconNotifications /> },
-                    { id: 'avatar', label: 'Avatar', icon: <IconAvatar /> }
-                  ].map((tab) => (
-                    <button
-                      key={tab.id}
-                      onClick={() => setActiveTab(tab.id as 'overview' | 'profile' | 'preferences' | 'notifications' | 'avatar')}
-                      className={`flex-shrink-0 px-3 py-2 rounded-lg transition-all flex items-center gap-2 text-xs font-medium ${
-                        activeTab === tab.id
-                          ? 'bg-accent-primary text-white'
-                          : 'text-text-secondary hover:text-text-main hover:bg-bg-secondary'
-                      }`}
-                    >
-                      <span className="flex-shrink-0">{tab.icon}</span>
-                      <span className="whitespace-nowrap">{tab.label}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-      
             {/* Contenido principal */}
-            <section className="flex-1 min-w-0">
+            <section className="flex-1 min-w-0 w-full">
               <div className="bg-bg-main rounded-xl border border-border shadow-sm p-4 md:p-6">
                 {activeTab === 'overview' && (
-                  <div>
-                    <h2 className="text-xl font-semibold text-text-main font-montserrat mb-4">Resumen</h2>
+                  <div className="space-y-6">
+                    <div className="border-b border-border pb-4">
+                      <h2 className="text-xl font-semibold text-text-main font-montserrat">
+                        Resumen
+                      </h2>
+                      <p className="text-sm text-text-secondary mt-1">Vista general de tu actividad y estadísticas</p>
+                    </div>
                     
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+                    <div className="pt-2 grid grid-cols-1 lg:grid-cols-3 gap-6">
                       {/* Perfil Card */}
-                      <div className="lg:col-span-1 bg-bg-secondary rounded-lg p-4 border border-border">
+                      <div className="lg:col-span-1 bg-bg-secondary rounded-lg p-6 border border-border">
                         <div className="text-center">
-                          <div className="w-16 h-16 mx-auto mb-3 rounded-full overflow-hidden bg-bg-main border-2 border-border">
+                          <div className="w-20 h-20 mx-auto mb-4 rounded-full overflow-hidden bg-bg-main border-2 border-border">
                             {avatarUrl ? (
                               <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
                             ) : (
@@ -283,20 +348,20 @@ export default function ProfilePage() {
                               </div>
                             )}
                           </div>
-                          <h3 className="font-semibold text-text-main">{profile?.full_name || 'Usuario'}</h3>
-                          <p className="text-sm text-text-secondary mb-3">{profile?.email}</p>
+                          <h3 className="font-semibold text-text-main text-lg">{profile?.full_name || 'Usuario'}</h3>
+                          <p className="text-sm text-text-secondary mb-4">{profile?.email}</p>
                           
-                          <div className="grid grid-cols-3 gap-2 text-center">
-                            <div>
-                              <div className="text-lg font-bold text-accent-primary">{userStats.played}</div>
+                          <div className="grid grid-cols-3 gap-3 text-center">
+                            <div className="bg-bg-main rounded-lg p-3">
+                              <div className="text-xl font-bold text-accent-primary">{userStats.played}</div>
                               <div className="text-xs text-text-secondary">Jugados</div>
                             </div>
-                            <div>
-                              <div className="text-lg font-bold text-green-500">{userStats.wins}</div>
+                            <div className="bg-bg-main rounded-lg p-3">
+                              <div className="text-xl font-bold text-green-500">{userStats.wins}</div>
                               <div className="text-xs text-text-secondary">Ganados</div>
                             </div>
-                            <div>
-                              <div className="text-lg font-bold text-red-500">{userStats.losses}</div>
+                            <div className="bg-bg-main rounded-lg p-3">
+                              <div className="text-xl font-bold text-red-500">{userStats.losses}</div>
                               <div className="text-xs text-text-secondary">Perdidos</div>
                             </div>
                           </div>
@@ -304,16 +369,16 @@ export default function ProfilePage() {
                       </div>
 
                       {/* Actividad Reciente */}
-                      <div className="lg:col-span-2 bg-bg-secondary rounded-lg p-4 border border-border">
-                        <h4 className="font-semibold text-text-main mb-3">Partidos Recientes</h4>
-                        <div className="space-y-2">
+                      <div className="lg:col-span-2 bg-bg-secondary rounded-lg p-6 border border-border">
+                        <h4 className="font-semibold text-text-main mb-4 text-lg">Partidos Recientes</h4>
+                        <div className="space-y-3">
                           {recentMatches.slice(0, 4).map((match, index) => (
-                            <div key={index} className="flex items-center justify-between py-2 px-3 bg-bg-main rounded-md">
+                            <div key={index} className="flex items-center justify-between py-3 px-4 bg-bg-main rounded-lg border border-border">
                               <div className="flex items-center gap-3">
-                                <div className={`w-2 h-2 rounded-full ${match.outcome === 'win' ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                                <div className={`w-3 h-3 rounded-full ${match.outcome === 'win' ? 'bg-green-500' : 'bg-red-500'}`}></div>
                                 <span className="text-sm font-medium text-text-main">{match.opponent}</span>
                               </div>
-                              <span className="text-xs text-text-secondary">{match.resultLabel}</span>
+                              <span className="text-xs text-text-secondary bg-bg-secondary px-2 py-1 rounded">{match.resultLabel}</span>
                             </div>
                           ))}
                         </div>
@@ -321,12 +386,12 @@ export default function ProfilePage() {
                     </div>
 
                     {/* Mis Grupos */}
-                    <div className="bg-bg-secondary rounded-lg p-4 border border-border">
-                      <h4 className="font-semibold text-text-main mb-3">Mis Grupos</h4>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div className="bg-bg-secondary rounded-lg p-6 border border-border">
+                      <h4 className="font-semibold text-text-main mb-4 text-lg">Mis Grupos</h4>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                         {myGroups.map((group, index) => (
-                          <div key={index} className="bg-bg-main rounded-md p-3 text-center">
-                            <div className="font-medium text-text-main text-sm">{group.name}</div>
+                          <div key={index} className="bg-bg-main rounded-lg p-4 text-center border border-border hover:border-accent-primary transition-colors">
+                            <div className="font-medium text-text-main text-sm mb-1">{group.name}</div>
                             <div className="text-xs text-text-secondary">{group.members} miembros</div>
                           </div>
                         ))}
@@ -336,102 +401,146 @@ export default function ProfilePage() {
                 )}
 
                 {activeTab === 'profile' && (
-                  <div>
-                    <h2 className="text-xl font-semibold text-text-main font-montserrat mb-4">Información Personal</h2>
-                    <ProfileForm showHeader={false} />
+                  <div className="space-y-6">
+                    <div className="border-b border-border pb-4">
+                      <h2 className="text-xl font-semibold text-text-main font-montserrat">Información Personal</h2>
+                      <p className="text-sm text-text-secondary mt-1">Actualiza tu información personal y de contacto</p>
+                    </div>
+                    <div className="pt-2">
+                      <ProfileForm showHeader={false} />
+                    </div>
                   </div>
                 )}
 
                 {activeTab === 'preferences' && (
-                  <div>
-                    <h2 className="text-xl font-semibold text-text-main font-montserrat mb-4">Preferencias de Juego</h2>
+                  <div className="space-y-6">
+                    <div className="border-b border-border pb-4">
+                      <h2 className="text-xl font-semibold text-text-main font-montserrat">Preferencias de Juego</h2>
+                      <p className="text-sm text-text-secondary mt-1">Configura tus horarios y preferencias de juego</p>
+                    </div>
                     
-                    <div className="space-y-4">
+                    <div className="pt-2 space-y-6">
                       {/* Horarios Preferidos */}
-                      <div>
-                        <label className="block text-sm font-medium text-text-main mb-2">
+                      <div className="bg-bg-secondary rounded-lg border border-border p-4">
+                        <label className="block text-sm font-medium text-text-main mb-3">
                           Horarios Preferidos
                         </label>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                          {['Mañana (6-12)', 'Tarde (12-18)', 'Noche (18-22)', 'Madrugada (22-6)'].map((slot) => (
-                            <label key={slot} className="flex items-center">
-                              <input
-                                type="checkbox"
-                                checked={gamePreferences.preferred_time_slots.includes(slot)}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setGamePreferences(prev => ({
-                                      ...prev,
-                                      preferred_time_slots: [...prev.preferred_time_slots, slot]
-                                    }))
-                                  } else {
-                                    setGamePreferences(prev => ({
-                                      ...prev,
-                                      preferred_time_slots: prev.preferred_time_slots.filter(s => s !== slot)
-                                    }))
-                                  }
-                                }}
-                                className="rounded border-border text-accent-primary focus:ring-accent-primary"
-                              />
-                              <span className="ml-2 text-sm text-text-main">{slot}</span>
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                          {['Mañana (6-12)', 'Tarde (12-18)', 'Noche (18-00)'].map((slot) => (
+                            <label key={slot} className="flex items-center cursor-pointer group">
+                              <div className="relative">
+                                <input
+                                  type="checkbox"
+                                  checked={gamePreferences.preferred_time_slots.includes(slot)}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setGamePreferences(prev => ({
+                                        ...prev,
+                                        preferred_time_slots: [...prev.preferred_time_slots, slot]
+                                      }))
+                                    } else {
+                                      setGamePreferences(prev => ({
+                                        ...prev,
+                                        preferred_time_slots: prev.preferred_time_slots.filter(s => s !== slot)
+                                      }))
+                                    }
+                                  }}
+                                  className="sr-only"
+                                />
+                                <div className={`w-5 h-5 rounded border-2 transition-all duration-200 flex items-center justify-center ${
+                                  gamePreferences.preferred_time_slots.includes(slot)
+                                    ? 'bg-accent-primary border-accent-primary'
+                                    : 'border-border bg-bg-main group-hover:border-accent-primary/50'
+                                }`}>
+                                  {gamePreferences.preferred_time_slots.includes(slot) && (
+                                    <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                    </svg>
+                                  )}
+                                </div>
+                              </div>
+                              <span className="ml-3 text-sm text-text-main group-hover:text-accent-primary transition-colors">{slot}</span>
                             </label>
                           ))}
                         </div>
                       </div>
 
                       {/* Días Preferidos */}
-                      <div>
-                        <label className="block text-sm font-medium text-text-main mb-2">
+                      <div className="bg-bg-secondary rounded-lg border border-border p-4">
+                        <label className="block text-sm font-medium text-text-main mb-3">
                           Días Preferidos
                         </label>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                           {['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'].map((day) => (
-                            <label key={day} className="flex items-center">
-                              <input
-                                type="checkbox"
-                                checked={gamePreferences.preferred_days.includes(day)}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setGamePreferences(prev => ({
-                                      ...prev,
-                                      preferred_days: [...prev.preferred_days, day]
-                                    }))
-                                  } else {
-                                    setGamePreferences(prev => ({
-                                      ...prev,
-                                      preferred_days: prev.preferred_days.filter(d => d !== day)
-                                    }))
-                                  }
-                                }}
-                                className="rounded border-border text-accent-primary focus:ring-accent-primary"
-                              />
-                              <span className="ml-2 text-sm text-text-main">{day}</span>
+                            <label key={day} className="flex items-center cursor-pointer group">
+                              <div className="relative">
+                                <input
+                                  type="checkbox"
+                                  checked={gamePreferences.preferred_days.includes(day)}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setGamePreferences(prev => ({
+                                        ...prev,
+                                        preferred_days: [...prev.preferred_days, day]
+                                      }))
+                                    } else {
+                                      setGamePreferences(prev => ({
+                                        ...prev,
+                                        preferred_days: prev.preferred_days.filter(d => d !== day)
+                                      }))
+                                    }
+                                  }}
+                                  className="sr-only"
+                                />
+                                <div className={`w-5 h-5 rounded border-2 transition-all duration-200 flex items-center justify-center ${
+                                  gamePreferences.preferred_days.includes(day)
+                                    ? 'bg-accent-primary border-accent-primary'
+                                    : 'border-border bg-bg-main group-hover:border-accent-primary/50'
+                                }`}>
+                                  {gamePreferences.preferred_days.includes(day) && (
+                                    <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                    </svg>
+                                  )}
+                                </div>
+                              </div>
+                              <span className="ml-3 text-sm text-text-main group-hover:text-accent-primary transition-colors">{day}</span>
                             </label>
                           ))}
                         </div>
                       </div>
 
                       {/* Distancia Máxima */}
-                      <div>
-                        <label className="block text-sm font-medium text-text-main mb-2">
-                          Distancia Máxima de Viaje: {gamePreferences.max_travel_distance} km
+                      <div className="bg-bg-secondary rounded-lg border border-border p-4">
+                        <label className="block text-sm font-medium text-text-main mb-4">
+                          Distancia Máxima de Viaje: <span className="text-accent-primary font-semibold">{gamePreferences.max_travel_distance} km</span>
                         </label>
-                        <input
-                          type="range"
-                          min="1"
-                          max="50"
-                          value={gamePreferences.max_travel_distance}
-                          onChange={(e) => setGamePreferences(prev => ({
-                            ...prev,
-                            max_travel_distance: parseInt(e.target.value)
-                          }))}
-                          className="w-full h-2 bg-bg-secondary rounded-lg appearance-none cursor-pointer slider"
-                        />
+                        <div className="relative">
+                          <input
+                            type="range"
+                            min="1"
+                            max="50"
+                            value={gamePreferences.max_travel_distance}
+                            onChange={(e) => setGamePreferences(prev => ({
+                              ...prev,
+                              max_travel_distance: parseInt(e.target.value)
+                            }))}
+                            className="w-full h-2 bg-border rounded-lg appearance-none cursor-pointer slider-custom"
+                            style={{
+                              background: `linear-gradient(to right, var(--accent-primary) 0%, var(--accent-primary) ${((gamePreferences.max_travel_distance - 1) / 49) * 100}%, var(--border-color) ${((gamePreferences.max_travel_distance - 1) / 49) * 100}%, var(--border-color) 100%)`
+                            }}
+                          />
+                          <div className="flex justify-between text-xs text-text-secondary mt-2">
+                            <span>1 km</span>
+                            <span>25 km</span>
+                            <span>50 km</span>
+                          </div>
+                        </div>
                       </div>
 
                       {/* Tipo de Cancha */}
-                      <div>
-                        <label className="block text-sm font-medium text-text-main mb-2">
+                      <div className="bg-bg-secondary rounded-lg border border-border p-4">
+                        <label className="block text-sm font-medium text-text-main mb-3">
                           Tipo de Cancha Preferido
                         </label>
                         <select
@@ -449,8 +558,8 @@ export default function ProfilePage() {
                       </div>
 
                       {/* Nivel Competitivo */}
-                      <div>
-                        <label className="block text-sm font-medium text-text-main mb-2">
+                      <div className="bg-bg-secondary rounded-lg border border-border p-4">
+                        <label className="block text-sm font-medium text-text-main mb-3">
                           Nivel Competitivo
                         </label>
                         <select
@@ -469,7 +578,7 @@ export default function ProfilePage() {
 
                       <button
                         onClick={saveGamePreferences}
-                        className="bg-accent-primary text-white px-4 py-2 rounded-md hover:bg-accent-primary/90 transition-colors font-medium"
+                        className="bg-accent-primary text-bg-main px-4 py-2 rounded-md hover:bg-accent-primary/90 transition-colors font-medium"
                       >
                         Guardar Preferencias
                       </button>
@@ -478,65 +587,94 @@ export default function ProfilePage() {
                 )}
 
                 {activeTab === 'notifications' && (
-                  <div>
-                    <h2 className="text-xl font-semibold text-text-main font-montserrat mb-4">
-                      Configuración de Notificaciones
-                    </h2>
+                  <div className="space-y-6">
+                    <div className="border-b border-border pb-4">
+                      <h2 className="text-xl font-semibold text-text-main font-montserrat">
+                        Configuración de Notificaciones
+                      </h2>
+                      <p className="text-sm text-text-secondary mt-1">Gestiona cómo y cuándo recibir notificaciones</p>
+                    </div>
                     
-                    <div className="space-y-4">
+                    <div className="pt-2 space-y-6">
                       {/* Email Notifications */}
                       <div>
-                        <h3 className="text-lg font-medium text-text-main mb-3">Notificaciones por Email</h3>
-                        <div className="space-y-2">
+                        <h3 className="text-lg font-medium text-text-main mb-4">Notificaciones por Email</h3>
+                        <div className="space-y-4">
                           {[
-                            { key: 'email_matches', label: 'Nuevos partidos disponibles' },
-                            { key: 'email_groups', label: 'Actividad en mis grupos' },
-                            { key: 'email_reminders', label: 'Recordatorios de partidos' }
+                            { key: 'email_matches', label: 'Nuevos partidos disponibles', description: 'Recibe emails cuando haya nuevos partidos en tu área' },
+                            { key: 'email_groups', label: 'Actividad en mis grupos', description: 'Notificaciones sobre mensajes y eventos en tus grupos' },
+                            { key: 'email_reminders', label: 'Recordatorios de partidos', description: 'Recordatorios antes de tus partidos programados' }
                           ].map((item) => (
-                            <label key={item.key} className="flex items-center">
-                              <input
-                                type="checkbox"
-                                checked={notifications[item.key as keyof NotificationSettings]}
-                                onChange={(e) => setNotifications(prev => ({
+                            <div key={item.key} className="flex items-center justify-between py-3 px-4 bg-bg-secondary rounded-lg">
+                              <div className="flex-1">
+                                <div className="text-text-main font-medium">{item.label}</div>
+                                <div className="text-text-secondary text-sm mt-1">{item.description}</div>
+                              </div>
+                              <button
+                                onClick={() => setNotifications(prev => ({
                                   ...prev,
-                                  [item.key]: e.target.checked
+                                  [item.key]: !prev[item.key as keyof NotificationSettings]
                                 }))}
-                                className="rounded border-border text-accent-primary focus:ring-accent-primary"
-                              />
-                              <span className="ml-3 text-text-main">{item.label}</span>
-                            </label>
+                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-accent-primary focus:ring-offset-2 ${
+                                  notifications[item.key as keyof NotificationSettings] 
+                                    ? 'bg-accent-primary' 
+                                    : 'bg-gray-300'
+                                }`}
+                              >
+                                <span
+                                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                    notifications[item.key as keyof NotificationSettings] 
+                                      ? 'translate-x-6' 
+                                      : 'translate-x-1'
+                                  }`}
+                                />
+                              </button>
+                            </div>
                           ))}
                         </div>
                       </div>
 
                       {/* Push Notifications */}
                       <div>
-                        <h3 className="text-lg font-medium text-text-main mb-3">Notificaciones Push</h3>
-                        <div className="space-y-2">
+                        <h3 className="text-lg font-medium text-text-main mb-4">Notificaciones Push</h3>
+                        <div className="space-y-4">
                           {[
-                            { key: 'push_matches', label: 'Nuevos partidos disponibles' },
-                            { key: 'push_groups', label: 'Actividad en mis grupos' },
-                            { key: 'push_reminders', label: 'Recordatorios de partidos' }
+                            { key: 'push_matches', label: 'Nuevos partidos disponibles', description: 'Notificaciones instantáneas en tu dispositivo' },
+                            { key: 'push_groups', label: 'Actividad en mis grupos', description: 'Alertas inmediatas de actividad en grupos' },
+                            { key: 'push_reminders', label: 'Recordatorios de partidos', description: 'Recordatorios push antes de tus partidos' }
                           ].map((item) => (
-                            <label key={item.key} className="flex items-center">
-                              <input
-                                type="checkbox"
-                                checked={notifications[item.key as keyof NotificationSettings]}
-                                onChange={(e) => setNotifications(prev => ({
+                            <div key={item.key} className="flex items-center justify-between py-3 px-4 bg-bg-secondary rounded-lg">
+                              <div className="flex-1">
+                                <div className="text-text-main font-medium">{item.label}</div>
+                                <div className="text-text-secondary text-sm mt-1">{item.description}</div>
+                              </div>
+                              <button
+                                onClick={() => setNotifications(prev => ({
                                   ...prev,
-                                  [item.key]: e.target.checked
+                                  [item.key]: !prev[item.key as keyof NotificationSettings]
                                 }))}
-                                className="rounded border-border text-accent-primary focus:ring-accent-primary"
-                              />
-                              <span className="ml-3 text-text-main">{item.label}</span>
-                            </label>
+                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-accent-primary focus:ring-offset-2 ${
+                                  notifications[item.key as keyof NotificationSettings] 
+                                    ? 'bg-accent-primary' 
+                                    : 'bg-gray-300'
+                                }`}
+                              >
+                                <span
+                                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                    notifications[item.key as keyof NotificationSettings] 
+                                      ? 'translate-x-6' 
+                                      : 'translate-x-1'
+                                  }`}
+                                />
+                              </button>
+                            </div>
                           ))}
                         </div>
                       </div>
 
                       <button
                         onClick={saveNotificationSettings}
-                        className="bg-accent-primary text-white px-4 py-2 rounded-md hover:bg-accent-primary/90 transition-colors font-medium"
+                        className="w-full bg-accent-primary text-bg-main px-4 py-3 rounded-lg hover:bg-accent-primary/90 transition-colors font-medium text-center"
                       >
                         Guardar Configuración
                       </button>
@@ -545,12 +683,15 @@ export default function ProfilePage() {
                 )}
 
                 {activeTab === 'avatar' && (
-                  <div>
-                    <h2 className="text-xl font-semibold text-text-main font-montserrat mb-4">
-                      Avatar de Perfil
-                    </h2>
+                  <div className="space-y-6">
+                    <div className="border-b border-border pb-4">
+                      <h2 className="text-xl font-semibold text-text-main font-montserrat">
+                        Avatar de Perfil
+                      </h2>
+                      <p className="text-sm text-text-secondary mt-1">Personaliza tu imagen de perfil</p>
+                    </div>
                     
-                    <div className="flex items-center space-x-6">
+                    <div className="pt-2 flex items-center space-x-6">
                       <div className="flex-shrink-0">
                         <div className="w-24 h-24 rounded-full overflow-hidden bg-bg-secondary border-4 border-border">
                           {avatarUrl ? (
@@ -575,7 +716,7 @@ export default function ProfilePage() {
                           Sube una imagen para personalizar tu perfil. Recomendamos imágenes cuadradas de al menos 200x200 píxeles.
                         </p>
                         
-                        <label className="bg-accent-primary text-white px-4 py-2 rounded-md hover:bg-accent-primary/90 transition-colors font-medium cursor-pointer inline-block">
+                        <label className="bg-accent-primary text-bg-main px-4 py-2 rounded-md hover:bg-accent-primary/90 transition-colors font-medium cursor-pointer inline-block">
                           {uploading ? 'Subiendo...' : 'Seleccionar Imagen'}
                           <input
                             type="file"
