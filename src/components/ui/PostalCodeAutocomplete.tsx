@@ -63,13 +63,22 @@ export default function PostalCodeAutocomplete({
 
   // Actualizar query cuando cambia el value prop
   useEffect(() => {
-    setQuery(value);
+    if (value !== query) {
+      setQuery(value);
+    }
   }, [value]);
 
   // Función de búsqueda con debounce
   useEffect(() => {
     const timeoutId = setTimeout(async () => {
       if (!query.trim() || query.length < 2 || !selectedCountry) {
+        setResults([]);
+        setIsOpen(false);
+        return;
+      }
+
+      // No abrir automáticamente si el query es igual al value inicial
+      if (query === value && value.length > 0) {
         setResults([]);
         setIsOpen(false);
         return;
@@ -94,7 +103,7 @@ export default function PostalCodeAutocomplete({
     }, 300);
 
     return () => clearTimeout(timeoutId);
-  }, [query, selectedCountry]);
+  }, [query, selectedCountry, value]);
 
   // Manejar selección de país
   const handleCountrySelect = (country: Country) => {
@@ -122,7 +131,13 @@ export default function PostalCodeAutocomplete({
 
   // Manejar teclas de navegación
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    // Solo interceptar teclas de navegación si el dropdown está abierto Y hay resultados
     if (!isOpen || results.length === 0) return;
+
+    // Solo interceptar teclas específicas de navegación
+    if (!['ArrowDown', 'ArrowUp', 'Enter', 'Escape'].includes(e.key)) {
+      return; // Permitir que otras teclas (números, letras) se procesen normalmente
+    }
 
     switch (e.key) {
       case "ArrowDown":
@@ -163,7 +178,7 @@ export default function PostalCodeAutocomplete({
     if (selectedCountry) {
       return `Código postal para ${selectedCountry.country_name}`;
     }
-    return 'Primero selecciona un país';
+    return placeholder || 'Primero selecciona un país';
   };
 
   return (
@@ -223,16 +238,25 @@ export default function PostalCodeAutocomplete({
 
       {/* Input de Código Postal */}
       <div className="relative">
-        <label className="block text-sm font-semibold text-text-main mb-2 font-open-sans">
-          Código Postal
-        </label>
+       
         <input
           ref={inputRef}
           type="text"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => {
+            const newValue = e.target.value;
+            setQuery(newValue);
+            
+            // Solo limpiar la confirmación si el usuario está editando un código postal ya confirmado
+            // y el nuevo valor no es parte del proceso de escritura normal
+            if (value && value.includes(' - ') && newValue !== value && !newValue.includes(value.split(' - ')[0])) {
+              onChange(null);
+            }
+          }}
           onKeyDown={handleKeyDown}
-          onFocus={() => {
+          onFocus={(e) => {
+            // Seleccionar todo el texto cuando se hace focus
+            e.target.select();
             if (results.length > 0) setIsOpen(true);
           }}
           onBlur={() => {
@@ -279,22 +303,30 @@ export default function PostalCodeAutocomplete({
             <div
               key={`${postalCode.postal_code}-${postalCode.place_name}`}
               onClick={() => handleSelect(postalCode)}
-              className={`px-4 py-3 cursor-pointer hover:bg-accent-primary hover:bg-opacity-10 transition-colors font-open-sans ${
-                index === selectedIndex ? "bg-accent-primary bg-opacity-20 border-l-4 border-accent-primary" : ""
+              className={`px-4 py-3 cursor-pointer transition-colors font-open-sans ${
+                index === selectedIndex 
+                  ? "bg-accent-primary text-bg-main border-l-4 border-accent-primary shadow-sm" 
+                  : "hover:bg-bg-secondary hover:bg-opacity-80"
               }`}
             >
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="font-medium text-text-main">
+                  <div className={`font-medium ${
+                    index === selectedIndex ? "text-bg-main" : "text-text-main"
+                  }`}>
                     {postalCode.postal_code} - {postalCode.place_name}
                   </div>
-                  <div className="text-sm text-text-secondary">
+                  <div className={`text-sm ${
+                    index === selectedIndex ? "text-bg-secondary" : "text-text-secondary"
+                  }`}>
                     {[postalCode.admin_name3, postalCode.admin_name2, postalCode.admin_name1]
                       .filter(Boolean)
                       .join(', ')}
                   </div>
                 </div>
-                <div className="text-xs text-text-secondary">
+                <div className={`text-xs ${
+                  index === selectedIndex ? "text-bg-secondary" : "text-text-secondary"
+                }`}>
                   {selectedCountry?.flag_emoji}
                 </div>
               </div>

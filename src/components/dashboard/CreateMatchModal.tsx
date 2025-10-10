@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import LocationAutocomplete from '@/components/ui/LocationAutocomplete'
-import { Location } from '@/lib/locationService'
+import { Location, locationService } from '@/lib/locationService'
 
 interface CreateMatchModalProps {
   isOpen: boolean
@@ -32,13 +32,17 @@ interface MatchFormErrors {
 interface Group {
   id: string
   name: string
+  city?: string
+  country_code?: string
 }
 
 interface GroupMemberWithGroups {
   groups: {
     id: string
     name: string
-  }[]
+    city?: string
+    country_code?: string
+  }[] | null
 }
 
 export default function CreateMatchModal({ isOpen, onClose, onSubmit, userId }: CreateMatchModalProps) {
@@ -52,6 +56,7 @@ export default function CreateMatchModal({ isOpen, onClose, onSubmit, userId }: 
     required_skill_level: null
   })
   const [userGroups, setUserGroups] = useState<Group[]>([])
+  const [selectedGroupCountry, setSelectedGroupCountry] = useState<string>('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errors, setErrors] = useState<MatchFormErrors>({})
 
@@ -62,19 +67,25 @@ export default function CreateMatchModal({ isOpen, onClose, onSubmit, userId }: 
         .select(`
           groups (
             id,
-            name
+            name,
+            city,
+            country_code
           )
         `)
         .eq('user_id', userId)
 
       if (error) throw error
 
-      const groups: Group[] = data?.flatMap((item: GroupMemberWithGroups) => 
-        item.groups.map(group => ({
+      const groups: Group[] = data?.map((item: GroupMemberWithGroups) => {
+        if (!item.groups || !item.groups[0]) return null
+        const group = item.groups[0]
+        return {
           id: group.id,
-          name: group.name
-        }))
-      ).filter(group => group.id) || []
+          name: group.name,
+          city: group.city,
+          country_code: group.country_code
+        }
+      }).filter(group => group !== null) as Group[] || []
 
       setUserGroups(groups)
     } catch (error) {
@@ -87,6 +98,34 @@ export default function CreateMatchModal({ isOpen, onClose, onSubmit, userId }: 
       fetchUserGroups()
     }
   }, [isOpen, userId, fetchUserGroups])
+
+  // Efecto para obtener el país del grupo seleccionado
+  useEffect(() => {
+    const getGroupCountry = async () => {
+      if (!formData.group_id) {
+        setSelectedGroupCountry('')
+        return
+      }
+
+      const selectedGroup = userGroups.find(group => group.id === formData.group_id)
+      if (selectedGroup?.country_code) {
+        setSelectedGroupCountry(selectedGroup.country_code)
+      } else if (selectedGroup?.city) {
+        // Fallback: obtener país por ciudad si no hay country_code
+        try {
+          const countryCode = await locationService.getCountryCodeByCity(selectedGroup.city)
+          setSelectedGroupCountry(countryCode || '')
+        } catch (error) {
+          console.error('Error obteniendo país del grupo:', error)
+          setSelectedGroupCountry('')
+        }
+      } else {
+        setSelectedGroupCountry('')
+      }
+    }
+
+    getGroupCountry()
+  }, [formData.group_id, userGroups])
 
   const validateForm = (): boolean => {
     const newErrors: MatchFormErrors = {}
@@ -258,6 +297,7 @@ export default function CreateMatchModal({ isOpen, onClose, onSubmit, userId }: 
               placeholder="Buscar ubicación del partido..."
               className="w-full"
               showCountryFlags={true}
+              countryFilter={selectedGroupCountry || undefined}
             />
             {errors.location_name && (
               <p className="text-error text-sm mt-1 font-open-sans">{errors.location_name}</p>

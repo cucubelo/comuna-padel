@@ -212,6 +212,8 @@ export type Database = {
           description: string | null
           group_type: 'private' | 'public'
           city: string | null
+          country: string | null
+          country_code: string | null
           created_at: string
         }
         Insert: {
@@ -221,6 +223,8 @@ export type Database = {
           description?: string | null
           group_type?: 'private' | 'public'
           city?: string | null
+          country?: string | null
+          country_code?: string | null
           created_at?: string
         }
         Update: {
@@ -230,6 +234,9 @@ export type Database = {
           description?: string | null
           group_type?: 'private' | 'public'
           city?: string | null
+          country?: string | null
+          country_code?: string | null
+          created_at?: string
         }
       }
       group_members: {

@@ -593,6 +593,30 @@ class LocationService {
   }
 
   /**
+   * Obtener código de país de una ciudad específica
+   */
+  async getCountryCodeByCity(cityName: string): Promise<string | null> {
+    try {
+      const { data, error } = await supabase
+        .from("popular_locations")
+        .select("country_code")
+        .ilike("name", `%${cityName}%`)
+        .limit(1)
+        .single();
+
+      if (error || !data) {
+        console.warn("No se encontró código de país para la ciudad:", cityName);
+        return null;
+      }
+
+      return data.country_code;
+    } catch (error) {
+      console.error("Error getting country code by city:", error);
+      return null;
+    }
+  }
+
+  /**
    * Obtener información de un país por código
    */
   getCountryInfo(countryCode: string): { name: string; flag: string } | null {

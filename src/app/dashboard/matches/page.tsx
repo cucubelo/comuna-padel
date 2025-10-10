@@ -53,7 +53,32 @@ export default function MatchesPage() {
     try {
       setLoading(true)
       
-      // First, try a simple query to check if tables exist
+      if (!user?.id) {
+        setMatches([])
+        return
+      }
+
+      // Primero obtener los grupos donde el usuario es miembro
+      const { data: userGroups, error: groupsError } = await supabase
+        .from('group_members')
+        .select('group_id')
+        .eq('user_id', user.id)
+
+      if (groupsError) {
+        console.warn('Error fetching user groups:', groupsError)
+        setMatches([])
+        return
+      }
+
+      // Si el usuario no pertenece a ningún grupo, no mostrar partidos
+      if (!userGroups || userGroups.length === 0) {
+        setMatches([])
+        return
+      }
+
+      const groupIds = userGroups.map(g => g.group_id)
+
+      // Obtener solo los partidos de los grupos donde el usuario es miembro
       const { data, error } = await supabase
         .from('matches')
         .select(`
@@ -61,6 +86,7 @@ export default function MatchesPage() {
           groups (name),
           profiles!matches_creator_id_fkey (full_name)
         `)
+        .in('group_id', groupIds)
         .order('scheduled_at', { ascending: true })
 
       if (error) {
@@ -69,7 +95,7 @@ export default function MatchesPage() {
         return
       }
 
-      // If matches exist, fetch participants separately to avoid complex joins
+      // Si hay partidos, obtener los participantes
       let matchesWithParticipants = data || []
       
       if (matchesWithParticipants.length > 0) {
@@ -90,12 +116,12 @@ export default function MatchesPage() {
           console.warn('Error fetching match participants:', participantsError)
         }
 
-        // Group participants by match_id
+        // Agrupar participantes por match_id
         const participantsByMatch = participants?.reduce((acc, participant) => {
           if (!acc[participant.match_id]) {
             acc[participant.match_id] = []
           }
-          // Transform the participant to match expected structure
+          // Transformar el participante para que coincida con la estructura esperada
           const transformedParticipant = {
             ...participant,
             profiles: Array.isArray(participant.profiles) ? participant.profiles[0] : participant.profiles
@@ -112,7 +138,7 @@ export default function MatchesPage() {
           } | null
         }>>) || {}
 
-        // Add participants to matches
+        // Agregar participantes a los partidos
         matchesWithParticipants = matchesWithParticipants.map(match => ({
           ...match,
           match_participants: participantsByMatch[match.id] || []
@@ -126,7 +152,7 @@ export default function MatchesPage() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [user?.id])
 
   const applyFilters = useCallback(() => {
     let filtered = matches
