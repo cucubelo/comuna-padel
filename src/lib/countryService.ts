@@ -1,11 +1,12 @@
 import { supabase } from "./supabase";
+import type { Database } from "@/lib/types/supabase";
 
 export interface Country {
   id: string;
   country_code: string;
   country_name: string;
   flag_emoji: string | null;
-  created_at: string;
+  created_at: string | null;
   updated_at: string | null;
 }
 
@@ -24,7 +25,15 @@ export async function getAllCountries(): Promise<Country[]> {
       return [];
     }
 
-    return data || [];
+    const rows = (data ?? []) as Database["public"]["Tables"]["countries"]["Row"][];
+    return rows.map(r => ({
+      id: r.id,
+      country_code: r.country_code,
+      country_name: r.country_name,
+      flag_emoji: r.flag_emoji,
+      created_at: r.created_at,
+      updated_at: r.updated_at,
+    }));
   } catch (error) {
     console.error('Error in getAllCountries:', error);
     return [];
@@ -42,12 +51,20 @@ export async function getCountryByCode(countryCode: string): Promise<Country | n
       .eq('country_code', countryCode.toUpperCase())
       .single();
 
-    if (error) {
+    if (error || !data) {
       console.error('Error fetching country:', error);
       return null;
     }
 
-    return data;
+    const row = data as Database["public"]["Tables"]["countries"]["Row"];
+    return {
+      id: row.id,
+      country_code: row.country_code,
+      country_name: row.country_name,
+      flag_emoji: row.flag_emoji,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+    };
   } catch (error) {
     console.error('Error in getCountryByCode:', error);
     return null;
@@ -71,7 +88,15 @@ export async function searchCountries(query: string): Promise<Country[]> {
       return [];
     }
 
-    return data || [];
+    const rows = (data ?? []) as Database["public"]["Tables"]["countries"]["Row"][];
+    return rows.map(r => ({
+      id: r.id,
+      country_code: r.country_code,
+      country_name: r.country_name,
+      flag_emoji: r.flag_emoji,
+      created_at: r.created_at,
+      updated_at: r.updated_at,
+    }));
   } catch (error) {
     console.error('Error in searchCountries:', error);
     return [];
@@ -114,10 +139,20 @@ export async function getPopularCountriesData(): Promise<Country[]> {
       return [];
     }
 
+    const rows = (data ?? []) as Database["public"]["Tables"]["countries"]["Row"][];
+
     // Ordenar según el orden de popularidad
     const orderedData = popularCodes
-      .map(code => data?.find(country => country.country_code === code))
-      .filter(Boolean) as Country[];
+      .map(code => rows.find(country => country.country_code === code))
+      .filter((c): c is Database["public"]["Tables"]["countries"]["Row"] => Boolean(c))
+      .map(r => ({
+        id: r.id,
+        country_code: r.country_code,
+        country_name: r.country_name,
+        flag_emoji: r.flag_emoji,
+        created_at: r.created_at,
+        updated_at: r.updated_at,
+      }));
 
     return orderedData;
   } catch (error) {

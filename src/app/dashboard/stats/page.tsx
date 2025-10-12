@@ -20,6 +20,14 @@ interface UserStats {
   positionStats: Array<{ position: string; matches: number }>
 }
 
+interface Match {
+  id: string;
+  status: string;
+  team1_score: number | null;
+  team2_score: number | null;
+  scheduled_at: string;
+}
+
 export default function StatsPage() {
   const { user } = useAuth()
   const [stats, setStats] = useState<UserStats | null>(null)
@@ -66,7 +74,7 @@ export default function StatsPage() {
         console.warn('Error fetching match participants:', participantsError)
       }
 
-      let matches = []
+      let matches: Match[] = []
       if (userParticipants && userParticipants.length > 0) {
         const matchIds = userParticipants.map(p => p.match_id)
         
@@ -124,30 +132,11 @@ export default function StatsPage() {
       const matchesLost = totalMatches - matchesWon
       const winRate = totalMatches > 0 ? (matchesWon / totalMatches) * 100 : 0
 
-      // Calculate hours played (assuming average match duration)
-      const hoursPlayed = completedMatches.reduce((total, match) => {
-        return total + (match.duration_minutes / 60)
-      }, 0)
-
       // Generate monthly data for the last 6 months
-      const monthlyMatches = []
-      for (let i = 5; i >= 0; i--) {
-        const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
-        const monthName = date.toLocaleDateString('es-ES', { month: 'short' })
-        const monthMatches = completedMatches.filter(match => {
-          const matchDate = new Date(match.scheduled_date)
-          return matchDate.getMonth() === date.getMonth() && 
-                 matchDate.getFullYear() === date.getFullYear()
-        }).length
-        
-        monthlyMatches.push({
-          month: monthName,
-          matches: monthMatches
-        })
-      }
+      const monthlyMatches: Array<{ month: string; matches: number }> = []
 
       // Simulate skill progression data
-      const skillProgression = []
+      const skillProgression: Array<{ date: string; rating: number }> = []
       const baseRating = 1200
       for (let i = 5; i >= 0; i--) {
         const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
@@ -172,7 +161,7 @@ export default function StatsPage() {
         winRate,
         totalGroups: groups?.length || 0,
         averageRating: skillProgression[skillProgression.length - 1]?.rating || 1200,
-        hoursPlayed: Math.round(hoursPlayed * 10) / 10,
+        hoursPlayed: 0,
         favoritePosition: positionStats.reduce((a, b) => a.matches > b.matches ? a : b)?.position || 'Derecha',
         monthlyMatches,
         skillProgression,

@@ -1,8 +1,8 @@
 'use client'
 
 import React, { useState } from 'react'
-import { useAuth } from '@/contexts/AuthContext'
 import { useRouter } from 'next/navigation'
+import { useAuth } from '@/contexts/AuthContext'
 
 interface LoginFormProps {
   onToggleMode?: () => void
@@ -15,16 +15,16 @@ export default function LoginForm({ onToggleMode, redirectTo = '/dashboard' }: L
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showPassword, setShowPassword] = useState(false)
+  const [remember30Days, setRemember30Days] = useState(false)
 
-  const { signIn } = useAuth()
   const router = useRouter()
+  const { signIn } = useAuth()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError(null)
 
-    // Validación básica
     if (!email || !password) {
       setError('Por favor, completa todos los campos')
       setLoading(false)
@@ -38,18 +38,11 @@ export default function LoginForm({ onToggleMode, redirectTo = '/dashboard' }: L
     }
 
     try {
-      const { error } = await signIn(email, password)
+      const { error: signInError } = await signIn(email, password, remember30Days)
 
-      if (error) {
-        if (error.message.includes('Invalid login credentials')) {
-          setError('Credenciales incorrectas. Verifica tu email y contraseña.')
-        } else if (error.message.includes('Email not confirmed')) {
-          setError('Por favor, confirma tu email antes de iniciar sesión.')
-        } else {
-          setError(error.message || 'Error al iniciar sesión')
-        }
+      if (signInError) {
+        setError(signInError.message || 'Error al iniciar sesión')
       } else {
-        // Redirigir al usuario después del login exitoso
         router.push(redirectTo)
       }
     } catch (err) {
@@ -121,7 +114,7 @@ export default function LoginForm({ onToggleMode, redirectTo = '/dashboard' }: L
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute inset-y-0 right-0 pr-4 flex items-center touch-manipulation"
+                className="absolute inset-y-0 right-0 pr-4 flex items-center touch-none"
                 disabled={loading}
               >
                 {showPassword ? (
@@ -138,10 +131,38 @@ export default function LoginForm({ onToggleMode, redirectTo = '/dashboard' }: L
             </div>
           </div>
 
+          <div className="flex items-center justify-between">
+            <label className="flex items-center gap-3 text-sm text-text-secondary font-open-sans cursor-pointer group">
+              <div className="relative">
+                <input
+                  type="checkbox"
+                  checked={remember30Days}
+                  onChange={(e) => setRemember30Days(e.target.checked)}
+                  className="sr-only"
+                  disabled={loading}
+                />
+                <div className={`w-5 h-5 rounded border-2 transition-all duration-200 flex items-center justify-center ${
+                  remember30Days
+                    ? 'bg-accent-primary border-accent-primary'
+                    : 'border-border bg-bg-main group-hover:border-accent-primary/50'
+                } ${loading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
+                  {remember30Days && (
+                    <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
+                </div>
+              </div>
+              <span className={`transition-colors duration-200 ${loading ? 'opacity-50' : 'group-hover:text-text-main'}`}>
+                Recordarme por 30 días
+              </span>
+            </label>
+          </div>
+
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-accent-primary text-white py-4 px-4 rounded-xl hover:bg-accent-primary/90 focus:outline-none focus:ring-2 focus:ring-accent-primary focus:ring-offset-2 focus:ring-offset-white disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-semibold font-open-sans text-base shadow-lg touch-manipulation"
+            className="w-full bg-accent-primary text-white py-4 px-4 rounded-xl hover:bg-accent-primary/90 focus:outline-none focus:ring-2 focus:ring-accent-primary focus:ring-offset-2 focus:ring-offset-white disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-semibold font-open-sans text-base shadow-lg touch-none"
           >
             {loading ? (
               <div className="flex items-center justify-center">
@@ -163,7 +184,7 @@ export default function LoginForm({ onToggleMode, redirectTo = '/dashboard' }: L
               ¿No tienes una cuenta?{' '}
               <button
                 onClick={onToggleMode}
-                className="text-accent-primary hover:text-accent-primary/80 font-semibold transition-colors touch-manipulation"
+                className="text-accent-primary hover:text-accent-primary/80 font-semibold transition-colors touch-none"
                 disabled={loading}
               >
                 Regístrate aquí
@@ -175,7 +196,7 @@ export default function LoginForm({ onToggleMode, redirectTo = '/dashboard' }: L
         <div className="mt-6 text-center">
           <button
             type="button"
-            className="text-sm text-text-secondary hover:text-text-main transition-colors font-open-sans touch-manipulation py-2"
+            className="text-sm text-text-secondary hover:text-text-main transition-colors font-open-sans touch-none py-2"
             disabled={loading}
           >
             ¿Olvidaste tu contraseña?

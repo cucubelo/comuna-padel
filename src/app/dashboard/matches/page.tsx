@@ -1,39 +1,23 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
+import { Tables, Enums } from '@/lib/types/supabase'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
 import MatchCard from '@/components/dashboard/MatchCard'
 import CreateMatchModal, { MatchFormData } from '@/components/dashboard/CreateMatchModal'
 
-interface Match {
-  id: string
-  group_id: string
-  creator_id: string | null
-  scheduled_at: string
-  location_name: string
-  latitude: number | null
-  longitude: number | null
-  status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled'
-  is_public: boolean
-  required_skill_level: number | null
-  team1_score: number | null
-  team2_score: number | null
-  created_at: string
-  groups: {
-    name: string
-  } | null
-  profiles: {
-    full_name: string
-  } | null
-  match_participants: Array<{
-    user_id: string
-    team_number: number | null
-    status: string | null
-    profiles: {
-      full_name: string
-    } | null
-  }>
+type MatchStatus = Enums<'match_status'>
+type ParticipantStatus = Enums<'participant_status'>
+
+interface MatchParticipant extends Tables<'match_participants'> {
+  profiles: Tables<'profiles'> | null
+}
+
+interface Match extends Tables<'matches'> {
+  groups: Tables<'groups'> | null
+  profiles: Tables<'profiles'> | null
+  match_participants: MatchParticipant[]
 }
 
 type FilterType = 'all' | 'my_matches' | 'available' | 'upcoming' | 'past'
@@ -83,8 +67,8 @@ export default function MatchesPage() {
         .from('matches')
         .select(`
           *,
-          groups (name),
-          profiles!matches_creator_id_fkey (full_name)
+          groups (*),
+          profiles!matches_creator_id_fkey (*)
         `)
         .in('group_id', groupIds)
         .order('scheduled_at', { ascending: true })
@@ -96,7 +80,7 @@ export default function MatchesPage() {
       }
 
       // Si hay partidos, obtener los participantes
-      let matchesWithParticipants = data || []
+      let matchesWithParticipants: Match[] = data || []
       
       if (matchesWithParticipants.length > 0) {
         const matchIds = matchesWithParticipants.map(m => m.id)
@@ -104,48 +88,33 @@ export default function MatchesPage() {
         const { data: participants, error: participantsError } = await supabase
           .from('match_participants')
           .select(`
-            match_id,
-            user_id,
-            team_number,
-            status,
-            profiles (full_name)
+            *,
+            profiles (*)
           `)
-          .in('match_id', matchIds)
+          .in('match_id', matchIds);
 
         if (participantsError) {
           console.warn('Error fetching match participants:', participantsError)
         }
 
         // Agrupar participantes por match_id
-        const participantsByMatch = participants?.reduce((acc, participant) => {
-          if (!acc[participant.match_id]) {
-            acc[participant.match_id] = []
+        const participantsByMatch = participants?.reduce((acc, p) => {
+          if (!p.match_id) return acc;
+          if (!acc[p.match_id]) {
+            acc[p.match_id] = [];
           }
-          // Transformar el participante para que coincida con la estructura esperada
-          const transformedParticipant = {
-            ...participant,
-            profiles: Array.isArray(participant.profiles) ? participant.profiles[0] : participant.profiles
-          }
-          acc[participant.match_id].push(transformedParticipant)
-          return acc
-        }, {} as Record<string, Array<{
-          user_id: string
-          match_id: string
-          team_number: number | null
-          status: string | null
-          profiles: {
-            full_name: string
-          } | null
-        }>>) || {}
+          acc[p.match_id].push(p as MatchParticipant);
+          return acc;
+        }, {} as Record<string, MatchParticipant[]>) || {};
 
         // Agregar participantes a los partidos
-        matchesWithParticipants = matchesWithParticipants.map(match => ({
+        matchesWithParticipants = data.map(match => ({
           ...match,
           match_participants: participantsByMatch[match.id] || []
-        }))
+        }));
       }
 
-      setMatches(matchesWithParticipants)
+      setMatches(matchesWithParticipants as Match[])
     } catch (error) {
       console.error('Error fetching matches:', error)
       setMatches([])
@@ -277,22 +246,21 @@ export default function MatchesPage() {
     try {
       const { error } = await supabase
         .from('matches')
-        .update({ status: 'cancelled' })
+        .update({ status: 'canceled' })
         .eq('id', matchId)
 
       if (error) throw error
 
       await fetchMatches()
     } catch (error) {
-      console.error('Error cancelling match:', error)
+      console.error('Error canceling match:', error)
     }
   }
 
   const getUserStatus = (match: Match): 'creator' | 'participant' | 'not_participant' => {
     if (match.creator_id === user?.id) return 'creator'
-    if (match.match_participants.some(p => p.user_id === user?.id && p.status === 'confirmed')) {
-      return 'participant'
-    }
+    const participant = match.match_participants.find(p => p.user_id === user?.id)
+    if (participant) return 'participant'
     return 'not_participant'
   }
 

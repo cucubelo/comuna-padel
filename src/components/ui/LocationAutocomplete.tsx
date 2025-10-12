@@ -177,8 +177,8 @@ export default function LocationAutocomplete({
       
       case 'Enter':
         e.preventDefault()
-        if (selectedIndex >= 0 && currentSuggestions[selectedIndex]) {
-          selectLocation(currentSuggestions[selectedIndex])
+        if (selectedIndex >= 0 && selectedIndex < currentSuggestions.length) {
+          selectLocation(currentSuggestions[selectedIndex]);
         }
         break
       

@@ -60,7 +60,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
             {/* Actions: Create group + Avatar + Logout + Mobile menu toggle */}
             <div className="flex items-center gap-4">
-              <Link href="/dashboard/groups?tab=my-groups&create=true" className="bg-accent-primary text-bg-main px-4 py-2 rounded-md hover:bg-accent-primary/90 transition-colors font-semibold font-open-sans hidden sm:inline-block">
+              <Link href="/dashboard/groups/create" className="bg-accent-primary text-bg-main px-4 py-2 rounded-md hover:bg-accent-primary/90 transition-colors font-semibold font-open-sans hidden sm:inline-block">
                 Crear Grupo
               </Link>
               <Link href="/dashboard/profile" className="flex items-center gap-2">
@@ -115,7 +115,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <div className={`pl-4 transition-all duration-300 ${groupsOpen ? 'max-h-40' : 'max-h-0 overflow-hidden'}`}>
                 <ul className="space-y-1 py-1">
                   <li>
-                    <Link href="/dashboard/groups?tab=my-groups" className={`block px-2 py-2 rounded-md ${isActive('/dashboard/groups') ? 'text-text-main' : 'text-text-secondary hover:text-text-main hover:bg-bg-secondary/50'}`}>
+                    <Link href="/dashboard/groups/create" className={`block px-2 py-2 rounded-md ${isActive('/dashboard/groups') ? 'text-text-main' : 'text-text-secondary hover:text-text-main hover:bg-bg-secondary/50'}`}>
                       Mis Grupos
                     </Link>
                   </li>

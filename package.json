@@ -11,6 +11,7 @@
     "release:sync-dev": "git switch dev && git merge origin/main && git push"
   },
   "dependencies": {
+    "@supabase/ssr": "^0.7.0",
     "@supabase/supabase-js": "^2.74.0",
     "@types/lodash.debounce": "^4.0.9",
     "clsx": "^2.1.1",

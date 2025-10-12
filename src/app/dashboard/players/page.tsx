@@ -1,21 +1,13 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
+import Image from 'next/image'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
+import { Tables } from '@/lib/types/supabase'
 
-interface Player {
-  id: string
-  username: string
-  full_name: string | null
-  avatar_url: string | null
-  skill_level: number | null
-  matches_played: number
-  matches_won: number
-  matches_lost: number
-  city?: string
-}
+type Player = Tables<'profiles'>
 
 export default function PlayersPage() {
   const { user } = useAuth()
@@ -26,12 +18,7 @@ export default function PlayersPage() {
   const [cityFilter, setCityFilter] = useState('')
   const [availableCities, setAvailableCities] = useState<string[]>([])
 
-  useEffect(() => {
-    fetchPlayers()
-    fetchAvailableCities()
-  }, [searchQuery, skillLevelFilter, cityFilter])
-
-  const fetchAvailableCities = async () => {
+  const fetchAvailableCities = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('profiles')
@@ -45,9 +32,9 @@ export default function PlayersPage() {
     } catch (error) {
       console.error('Error fetching cities:', error)
     }
-  }
+  }, [])
 
-  const fetchPlayers = async () => {
+  const fetchPlayers = useCallback(async () => {
     try {
       setLoading(true)
       
@@ -59,7 +46,8 @@ export default function PlayersPage() {
 
       // Apply search filter
       if (searchQuery.trim()) {
-        query = query.or(`username.ilike.%${searchQuery}%,full_name.ilike.%${searchQuery}%`)
+        const search = searchQuery.trim();
+        query = query.or(`username.ilike.%${search}%,full_name.ilike.%${search}%`);
       }
 
       // Apply skill level filter
@@ -72,7 +60,7 @@ export default function PlayersPage() {
         query = query.eq('city', cityFilter)
       }
 
-      const { data, error } = await query.order('matches_played', { ascending: false })
+      const { data, error } = await query
 
       if (error) throw error
 
@@ -82,7 +70,12 @@ export default function PlayersPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [user?.id, searchQuery, skillLevelFilter, cityFilter])
+
+  useEffect(() => {
+    fetchPlayers()
+    fetchAvailableCities()
+  }, [fetchPlayers, fetchAvailableCities])
 
   const clearFilters = () => {
     setSearchQuery('')
@@ -100,11 +93,6 @@ export default function PlayersPage() {
       5: 'Experto'
     }
     return levels[level as keyof typeof levels] || `Nivel ${level}`
-  }
-
-  const getWinRate = (won: number, total: number) => {
-    if (total === 0) return 0
-    return Math.round((won / total) * 100)
   }
 
   return (
@@ -218,9 +206,11 @@ export default function PlayersPage() {
                   <div className="flex items-center mb-4">
                     <div className="flex-shrink-0">
                       {player.avatar_url ? (
-                        <img
+                        <Image
                           src={player.avatar_url}
                           alt={player.username}
+                          width={48}
+                          height={48}
                           className="h-12 w-12 rounded-full object-cover"
                         />
                       ) : (
@@ -261,14 +251,16 @@ export default function PlayersPage() {
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-text-secondary">Partidos:</span>
                       <span className="text-sm font-medium text-text-main">
-                        {player.matches_played}
+                        {/* TODO: Calcular partidos jugados */}
+                        N/A
                       </span>
                     </div>
 
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-text-secondary">% Victorias:</span>
                       <span className="text-sm font-medium text-text-main">
-                        {getWinRate(player.matches_won, player.matches_played)}%
+                        {/* TODO: Calcular ratio de victorias */}
+                        N/A
                       </span>
                     </div>
                   </div>

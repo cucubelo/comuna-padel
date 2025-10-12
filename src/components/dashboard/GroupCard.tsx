@@ -1,38 +1,83 @@
-'use client'
+"use client";
 
-import React from 'react'
-import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import React, { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import {
+  createAccessRequest,
+  hasUserPendingRequest,
+} from "@/lib/group-access-requests";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface GroupCardProps {
   group: {
-    id: string
-    name: string
-    description?: string
-    current_members?: number
-    city?: string
-    country?: string
-    country_code?: string
-    postal_code?: string
-    place_name?: string
-    group_type: string
-    creator_name?: string
-    user_role?: 'admin' | 'member'
-  }
-  onJoin?: (groupId: string) => void
-  onLeave?: (groupId: string) => void
-  onEdit?: (group: GroupCardProps['group']) => void
-  showJoinButton?: boolean
+    id: string;
+    name: string;
+    description?: string;
+    current_members?: number;
+    city?: string;
+    country?: string;
+    country_code?: string;
+    postal_code?: string;
+    place_name?: string;
+    group_type: string;
+    creator_name?: string;
+    user_role?: "admin" | "member";
+  };
+  onJoin?: (groupId: string) => void;
+  onLeave?: (groupId: string) => void;
+  onEdit?: (group: GroupCardProps["group"]) => void;
+  showJoinButton?: boolean;
 }
 
-export default function GroupCard({ 
-  group, 
-  onJoin, 
+export default function GroupCard({
+  group,
+  onJoin,
   onLeave,
-  onEdit: _onEdit, // Renombrado para indicar que no se usa actualmente
-  showJoinButton = false
+  showJoinButton = false,
 }: GroupCardProps) {
-  const router = useRouter()
+  const router = useRouter();
+  const { user } = useAuth();
+  const [isRequestingAccess, setIsRequestingAccess] = useState(false);
+  const [hasPendingRequest, setHasPendingRequest] = useState(false);
+
+  // Verificar si el usuario tiene una solicitud pendiente
+  const checkPendingRequest = useCallback(async () => {
+    if (!user) return;
+    try {
+      const hasPendingRequest = await hasUserPendingRequest(group.id, user.id);
+      setHasPendingRequest(hasPendingRequest);
+    } catch (error) {
+      console.error("Error verificando solicitud pendiente:", error);
+    }
+  }, [group.id, user]);
+
+  useEffect(() => {
+    if (user && group.group_type === "private" && showJoinButton) {
+      checkPendingRequest();
+    }
+  }, [user, group.id, group.group_type, showJoinButton, checkPendingRequest]);
+
+  const handleRequestAccess = async () => {
+    if (!user) return;
+
+    setIsRequestingAccess(true);
+    try {
+      const { error } = await createAccessRequest({ groupId: group.id, userId: user.id });
+
+      if (error) {
+        alert(`Error: ${error}`);
+      } else {
+        alert("Solicitud de acceso enviada correctamente");
+        setHasPendingRequest(true);
+      }
+    } catch (err) {
+      console.error("Error al enviar la solicitud:", err);
+      alert("Error al enviar la solicitud");
+    } finally {
+      setIsRequestingAccess(false);
+    }
+  };
   return (
     <div className="bg-bg-main border border-border rounded-xl shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden group">
       {/* Header Section */}
@@ -56,12 +101,24 @@ export default function GroupCard({
           {/* Members Info */}
           <div className="flex items-center gap-3 p-2 sm:p-3 bg-bg-secondary/50 rounded-lg">
             <div className="flex-shrink-0 w-8 h-8 sm:w-10 sm:h-10 bg-accent-primary/10 rounded-full flex items-center justify-center">
-              <svg className="w-4 h-4 sm:w-5 sm:h-5 text-accent-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.916-.75M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.916-.75M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+              <svg
+                className="w-4 h-4 sm:w-5 sm:h-5 text-accent-primary"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M17 20h5v-2a3 3 0 00-5.916-.75M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.916-.75M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
+                />
               </svg>
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-xs sm:text-sm text-text-secondary font-open-sans">Miembros</p>
+              <p className="text-xs sm:text-sm text-text-secondary font-open-sans">
+                Miembros
+              </p>
               <p className="text-sm sm:text-base font-medium text-text-main font-open-sans">
                 {group.current_members || 0} miembros
               </p>
@@ -72,13 +129,30 @@ export default function GroupCard({
           {(group.city || group.place_name) && (
             <div className="flex items-start gap-3 p-2 sm:p-3 bg-bg-secondary/50 rounded-lg">
               <div className="flex-shrink-0 w-8 h-8 sm:w-10 sm:h-10 bg-accent-secondary/10 rounded-full flex items-center justify-center mt-0.5">
-                <svg className="w-4 h-4 sm:w-5 sm:h-5 text-accent-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                <svg
+                  className="w-4 h-4 sm:w-5 sm:h-5 text-accent-secondary"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+                  />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                  />
                 </svg>
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-xs sm:text-sm text-text-secondary font-open-sans mb-1">Ubicación</p>
+                <p className="text-xs sm:text-sm text-text-secondary font-open-sans mb-1">
+                  Ubicación
+                </p>
                 <div className="space-y-0.5">
                   {group.place_name && (
                     <p className="text-sm sm:text-base font-medium text-text-main font-open-sans line-clamp-1">
@@ -86,7 +160,7 @@ export default function GroupCard({
                     </p>
                   )}
                   <p className="text-xs sm:text-sm text-text-secondary font-open-sans line-clamp-1">
-                    {group.city}, {group.country}
+                    {[group.city, group.country].filter(Boolean).join(', ')}
                   </p>
                   {group.postal_code && (
                     <span className="inline-block bg-accent-primary/10 text-accent-primary px-2 py-0.5 rounded text-xs font-medium">
@@ -102,12 +176,24 @@ export default function GroupCard({
           {group.creator_name && (
             <div className="flex items-center gap-3 p-2 sm:p-3 bg-bg-secondary/50 rounded-lg">
               <div className="flex-shrink-0 w-8 h-8 sm:w-10 sm:h-10 bg-green-100 rounded-full flex items-center justify-center">
-                <svg className="w-4 h-4 sm:w-5 sm:h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                <svg
+                  className="w-4 h-4 sm:w-5 sm:h-5 text-green-600"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                  />
                 </svg>
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-xs sm:text-sm text-text-secondary font-open-sans">Creador</p>
+                <p className="text-xs sm:text-sm text-text-secondary font-open-sans">
+                  Creador
+                </p>
                 <p className="text-sm sm:text-base font-medium text-text-main font-open-sans line-clamp-1">
                   {group.creator_name}
                 </p>
@@ -119,9 +205,9 @@ export default function GroupCard({
         {/* Badges */}
         <div className="flex flex-wrap gap-2 mb-4 sm:mb-6">
           <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-accent-primary/10 text-accent-primary border border-accent-primary/20">
-            {group.group_type === 'public' ? 'Público' : 'Privado'}
+            {group.group_type === "public" ? "Público" : "Privado"}
           </span>
-          {group.user_role === 'admin' && (
+          {group.user_role === "admin" && (
             <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-warning/10 text-warning border border-warning/20">
               Admin
             </span>
@@ -130,14 +216,14 @@ export default function GroupCard({
 
         {/* Action Buttons */}
         <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
-          <Link 
+          <Link
             href={`/dashboard/groups/${group.id}`}
             className="flex-1 bg-accent-primary/10 text-accent-primary px-4 py-2.5 sm:py-3 rounded-lg font-medium font-open-sans transition-colors text-center border border-accent-primary/20 hover:border-accent-primary/40 text-sm sm:text-base cursor-pointer"
           >
             Ver detalles
           </Link>
-          
-          {showJoinButton && onJoin && (
+
+          {showJoinButton && group.group_type === "public" && onJoin && (
             <button
               onClick={() => onJoin(group.id)}
               className="flex-1 bg-accent-primary hover:bg-accent-primary/90 text-bg-main px-4 py-2.5 sm:py-3 rounded-lg font-medium font-open-sans transition-colors text-sm sm:text-base cursor-pointer"
@@ -145,8 +231,31 @@ export default function GroupCard({
               Unirse
             </button>
           )}
-          
-          {group.user_role === 'member' && onLeave && (
+
+          {showJoinButton &&
+            group.group_type === "private" &&
+            !hasPendingRequest && (
+              <button
+                onClick={handleRequestAccess}
+                disabled={isRequestingAccess}
+                className="flex-1 bg-accent-secondary hover:bg-accent-secondary/90 disabled:opacity-50 disabled:cursor-not-allowed text-bg-main px-4 py-2.5 sm:py-3 rounded-lg font-medium font-open-sans transition-colors text-sm sm:text-base cursor-pointer"
+              >
+                {isRequestingAccess ? "Enviando..." : "Solicitar Acceso"}
+              </button>
+            )}
+
+          {showJoinButton &&
+            group.group_type === "private" &&
+            hasPendingRequest && (
+              <button
+                disabled
+                className="flex-1 bg-gray-100 text-gray-500 px-4 py-2.5 sm:py-3 rounded-lg font-medium font-open-sans text-sm sm:text-base cursor-not-allowed"
+              >
+                Solicitud Enviada
+              </button>
+            )}
+
+          {group.user_role === "member" && onLeave && (
             <button
               onClick={() => onLeave(group.id)}
               className="flex-1 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 px-4 py-2.5 sm:py-3 rounded-lg font-medium font-open-sans transition-colors text-sm sm:text-base cursor-pointer"
@@ -154,8 +263,8 @@ export default function GroupCard({
               Abandonar
             </button>
           )}
-          
-          {group.user_role === 'admin' && (
+
+          {group.user_role === "admin" && (
             <button
               onClick={() => router.push(`/dashboard/groups/edit/${group.id}`)}
               className="bg-bg-secondary hover:bg-border text-text-main border border-border px-4 py-2.5 sm:py-3 rounded-lg font-medium font-open-sans transition-colors text-sm sm:text-base cursor-pointer"
@@ -166,5 +275,5 @@ export default function GroupCard({
         </div>
       </div>
     </div>
-  )
+  );
 }

@@ -1,4 +1,3 @@
-/* eslint-disable @next/next/no-img-element */
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
@@ -11,7 +10,7 @@ import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
 
 export default function DashboardPage() {
-  const { user, profile, signOut } = useAuth()
+  const { user, profile } = useAuth()
   const [stats, setStats] = useState({
     totalMatches: 0,
     upcomingMatches: 0,
@@ -55,7 +54,7 @@ export default function DashboardPage() {
         const { data, error: matchesError } = await supabase
           .from('matches')
           .select('id')
-          .gte('scheduled_date', now)
+          .gte('scheduled_at', now)
           .eq('status', 'scheduled')
           .in('id', matchIds)
 
@@ -106,13 +105,7 @@ export default function DashboardPage() {
     }
   }, [user, fetchDashboardStats])
 
-  const handleSignOut = async () => {
-    const { error } = await signOut()
-    if (error) {
-      console.error('Error cerrando sesión:', error)
-      alert('Error al cerrar sesión')
-    }
-  }
+
 
   const handleCreateMatch = async (matchData: MatchFormData) => {
     if (!user?.id) return

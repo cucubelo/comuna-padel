@@ -1,21 +1,24 @@
 import { supabase } from "./supabase";
+import type { Database } from "./types/supabase";
 
 export interface PostalCode {
   id?: string;
   postal_code: string;
   country_code: string;
   place_name: string;
-  admin_name1?: string; // Comunidad/Estado/Provincia
-  admin_name2?: string; // Provincia/Condado
-  admin_name3?: string; // Municipio/Ciudad
-  admin_code1?: string; // Código de Comunidad/Estado
-  admin_code2?: string; // Código de Provincia
-  admin_code3?: string; // Código de Municipio
-  latitude?: number;
-  longitude?: number;
-  search_count?: number;
+  admin_name1?: string | null; // Comunidad/Estado/Provincia
+  admin_name2?: string | null; // Provincia/Condado
+  admin_name3?: string | null; // Municipio/Ciudad
+  admin_code1?: string | null; // Código de Comunidad/Estado
+  admin_code2?: string | null; // Código de Provincia
+  admin_code3?: string | null; // Código de Municipio
+  latitude?: number | null;
+  longitude?: number | null;
+  search_count?: number | null;
   display_name?: string;
 }
+
+type PostalCodeInsert = Database["public"]["Tables"]["postal_codes"]["Insert"];
 
 // Interfaz para la respuesta de la API de GeoNames
 interface GeoNamesResponse {
@@ -55,10 +58,11 @@ export async function searchLocalPostalCodes(
       return [];
     }
 
-    return data?.map(item => ({
-      ...item,
-      display_name: `${item.place_name}, ${item.admin_name1 || item.admin_name2 || item.admin_name3}`
-    })) || [];
+    const rows = (data ?? []) as Database["public"]["Tables"]["postal_codes"]["Row"][];
+    return rows.map(row => ({
+      ...row,
+      display_name: `${row.place_name}, ${row.admin_name1 || row.admin_name2 || row.admin_name3}`
+    }));
   } catch (error) {
     console.error('Error in searchLocalPostalCodes:', error);
     return [];
@@ -74,7 +78,7 @@ export async function searchGeoNamesAPI(
 ): Promise<PostalCode[]> {
   try {
     const username = 'cucubelo'; // Tu username de GeoNames
-    const url = `http://api.geonames.org/postalCodeSearchJSON?postalcode=${postalCode}&country=${countryCode}&maxRows=10&username=${username}`;
+    const url = `https://secure.geonames.org/postalCodeSearchJSON?postalcode=${postalCode}&country=${countryCode}&maxRows=10&username=${username}`;
     
     const response = await fetch(url);
     
@@ -114,22 +118,23 @@ export async function searchGeoNamesAPI(
  */
 export async function savePostalCode(postalCode: PostalCode): Promise<boolean> {
   try {
-    const { error } = await supabase
-      .from('postal_codes')
-      .insert({
-        postal_code: postalCode.postal_code,
-        country_code: postalCode.country_code,
-        place_name: postalCode.place_name,
-        admin_name1: postalCode.admin_name1,
-        admin_name2: postalCode.admin_name2,
-        admin_name3: postalCode.admin_name3,
-        admin_code1: postalCode.admin_code1,
-        admin_code2: postalCode.admin_code2,
-        admin_code3: postalCode.admin_code3,
-        latitude: postalCode.latitude,
-        longitude: postalCode.longitude,
-        search_count: 1
-      });
+    const row: PostalCodeInsert = {
+      postal_code: postalCode.postal_code,
+      country_code: postalCode.country_code,
+      place_name: postalCode.place_name,
+      admin_name1: postalCode.admin_name1 ?? null,
+      admin_name2: postalCode.admin_name2 ?? null,
+      admin_name3: postalCode.admin_name3 ?? null,
+      admin_code1: postalCode.admin_code1 ?? null,
+      admin_code2: postalCode.admin_code2 ?? null,
+      admin_code3: postalCode.admin_code3 ?? null,
+      latitude: postalCode.latitude ?? null,
+      longitude: postalCode.longitude ?? null,
+      search_count: 1
+    };
+
+    const { error } = await supabase.from('postal_codes')
+      .insert(row);
 
     if (error) {
       console.error('Error saving postal code:', error);
@@ -152,11 +157,13 @@ export async function incrementSearchCount(
   placeName: string
 ): Promise<void> {
   try {
-    const { error } = await supabase.rpc('increment_postal_code_search', {
+    const args: Database["public"]["Functions"]["increment_postal_code_search"]["Args"] = {
       p_postal_code: postalCode,
       p_country_code: countryCode,
       p_place_name: placeName
-    });
+    };
+
+    const { error } = await supabase.rpc('increment_postal_code_search', args);
 
     if (error) {
       console.error('Error incrementing search count:', error);

@@ -16,6 +16,8 @@ interface UserData {
 }
 
 type Profile = Database["public"]["Tables"]["profiles"]["Row"];
+type ProfileInsert = Database["public"]["Tables"]["profiles"]["Insert"];
+// type ProfileUpdate = Database["public"]["Tables"]["profiles"]["Update"];
 
 interface AuthContextType {
   user: User | null;
@@ -29,7 +31,8 @@ interface AuthContextType {
   ) => Promise<{ error: AuthError | null }>;
   signIn: (
     email: string,
-    password: string
+    password: string,
+    remember30Days?: boolean
   ) => Promise<{ error: AuthError | null }>;
   signOut: () => Promise<{ error: AuthError | null }>;
   updateProfile: (
@@ -71,17 +74,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               (user.email
                 ? user.email.split("@")[0]
                 : `user_${user.id.slice(0, 8)}`);
+            
+            const profileData: ProfileInsert = {
+              id: userId,
+              username,
+              full_name: user.user_metadata?.full_name || null,
+              skill_level:
+                typeof user.user_metadata?.skill_level === "number"
+                  ? user.user_metadata?.skill_level
+                  : 1,
+            };
+
             const { data: newProfile, error: createError } = await supabase
               .from("profiles")
-              .insert({
-                id: userId,
-                username,
-                full_name: user.user_metadata?.full_name || null,
-                skill_level:
-                  typeof user.user_metadata?.skill_level === "number"
-                    ? user.user_metadata?.skill_level
-                    : 1,
-              })
+              .upsert([profileData])
               .select()
               .single();
 
@@ -155,7 +161,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           (data.user.email
             ? data.user.email.split("@")[0]
             : `user_${data.user.id.slice(0, 8)}`);
-        const { error: profileError } = await supabase.from("profiles").insert({
+        
+        const newProfileData: ProfileInsert = {
           id: data.user.id,
           username,
           full_name: userData?.full_name || null,
@@ -163,7 +170,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             typeof userData?.skill_level === "number"
               ? userData.skill_level
               : 1,
-        });
+        };
+
+        const { error: profileError } = await supabase
+          .from("profiles")
+          .insert([newProfileData]);
 
         if (profileError) {
           console.error("Error creando perfil:", profileError);
@@ -178,22 +189,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   // Función para iniciar sesión
-  const signIn = async (email: string, password: string) => {
+  const signIn = async (
+    email: string,
+    password: string,
+    remember30Days: boolean = false
+  ) => {
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      setLoading(true);
 
-      if (error) {
-        console.error("Error en inicio de sesión:", error);
-        return { error };
+      // Usar el endpoint del servidor para que las cookies HTTP-only de Supabase se establezcan correctamente
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        // aseguramos el envío/recepción de cookies
+        credentials: 'include',
+        body: JSON.stringify({ email, password, remember30Days })
+      })
+
+      if (!res.ok) {
+        const data: { error?: string } = await res.json().catch(() => ({} as { error?: string }))
+        setLoading(false)
+        return { error: new AuthError(data?.error || 'Error al iniciar sesión') }
       }
 
-      return { error: null };
+      const data: { user?: User | null } = await res.json()
+      const loggedUser: User | null = data?.user ?? null
+
+      if (!loggedUser) {
+        setLoading(false)
+        return { error: new AuthError('No se obtuvo usuario tras el login') }
+      }
+
+      // Carga de perfil y actualización de estado
+      const profileData = await loadProfile(loggedUser.id)
+      setProfile(profileData)
+      setUser(loggedUser)
+      setSession(null)
+      setLoading(false)
+
+      return { error: null }
     } catch (error) {
-      console.error("Error inesperado en inicio de sesión:", error);
-      return { error: error as AuthError };
+      console.error('Error inesperado en inicio de sesión:', error)
+      setLoading(false)
+      return { error: error as AuthError }
     }
   };
 
@@ -202,11 +240,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       console.log("Iniciando proceso de cierre de sesión...");
       
-      const { error } = await supabase.auth.signOut();
-
-      if (error) {
-        console.error("Error cerrando sesión:", error);
-        return { error };
+      // Usar el endpoint del servidor para limpiar cookies HTTP-only
+      const res = await fetch('/api/auth/logout', { method: 'POST' })
+      if (!res.ok) {
+        const data: { error?: string } = await res.json().catch(() => ({} as { error?: string }))
+        const msg: string = data?.error || 'Error cerrando sesión'
+        console.error("Error cerrando sesión (server):", msg)
+        return { error: { message: msg } as AuthError }
       }
 
       // Limpiar estado local inmediatamente
@@ -236,69 +276,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log("Iniciando updateProfile con datos:", profileData);
       console.log("Usuario actual:", user.id);
 
-      // Intentar actualizar el perfil existente
+      // Usar upsert para manejar tanto insert como update
+      const profileToUpsert: ProfileInsert = {
+        id: user.id,
+        username: profileData.username ||
+          (profileData.full_name?.toLowerCase().replace(/\s+/g, "_") + "_" + Math.random().toString(36).substr(2, 9)),
+        ...profileData,
+        updated_at: new Date().toISOString(),
+      };
+
+      console.log("Datos para upsert:", profileToUpsert);
+
       const { data, error } = await supabase
         .from("profiles")
-        .update({
-          ...profileData,
-          updated_at: new Date().toISOString()
-        })
-        .eq("id", user.id)
+        .upsert([profileToUpsert])
         .select();
 
-      console.log("Resultado de la actualización:", { data, error });
+      console.log("Resultado del upsert:", { data, error });
 
       if (error) {
-        console.error("Error en la actualización:", error);
-
-        // Si el perfil no existe, intentar crearlo
-        if (error.code === "PGRST116") {
-          console.log("Perfil no existe, intentando crear uno nuevo");
-
-          const newProfile = {
-            id: user.id,
-            username:
-              profileData.full_name?.toLowerCase().replace(/\s+/g, "_") +
-              "_" +
-              Math.random().toString(36).substr(2, 9),
-            ...profileData,
-          };
-
-          console.log("Datos para crear nuevo perfil:", newProfile);
-
-          const { data: newData, error: createError } = await supabase
-            .from("profiles")
-            .insert([newProfile])
-            .select();
-
-          console.log("Resultado de la creación:", { newData, createError });
-
-          if (createError) {
-            console.error("Error creando perfil:", createError);
-            return { error: new Error(createError.message) };
-          }
-
-          if (newData && newData[0]) {
-            setProfile(newData[0]);
-            console.log("Perfil creado exitosamente:", newData[0]);
-            return { error: null };
-          }
-        }
-
+        console.error("Error en el upsert:", error);
         return { error: new Error(error.message) };
       }
 
-      if (data && data[0]) {
+      if (data && data.length > 0) {
         setProfile(data[0]);
-        console.log("Perfil actualizado exitosamente:", data[0]);
-        return { error: null };
+        console.log("Perfil guardado exitosamente:", data[0]);
       }
 
-      console.error("No se recibieron datos después de la actualización");
-      return { error: new Error("No se pudo actualizar el perfil") };
-    } catch (err) {
-      console.error("Error inesperado en updateProfile:", err);
-      return { error: new Error("Error inesperado al actualizar el perfil") };
+      return { error: null };
+    } catch (error) {
+      console.error("Error inesperado en updateProfile:", error);
+      return {
+        error: new Error(
+          error instanceof Error ? error.message : "Error desconocido"
+        ),
+      };
     }
   };
 
@@ -307,64 +320,91 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Obtener sesión inicial
     const getInitialSession = async () => {
       try {
-        console.log("Obteniendo sesión inicial...");
-        
-        const {
-          data: { session },
-          error,
-        } = await supabase.auth.getSession();
+        console.log('Obteniendo sesión inicial (cookies clásico)...')
 
-        if (error) {
-          console.error("Error obteniendo sesión inicial:", error);
-          setLoading(false);
-          return;
+        // Comprobación de expiración suave basada en preferencia del usuario
+        try {
+          const getCookie = (name: string): string | null => {
+            const match = document.cookie.match(new RegExp('(^|; )' + name + '=([^;]*)'))
+            return match ? decodeURIComponent(match[2]) : null
+          }
+          const loginAtStr = typeof document !== 'undefined' ? getCookie('cp_login_at') : null
+          const rememberFlag = typeof document !== 'undefined' ? getCookie('cp_remember_30') : null
+
+          console.log('🔍 Verificando expiración de sesión:', {
+            loginAtStr,
+            rememberFlag,
+            remember30Days: rememberFlag === '1'
+          })
+
+          if (loginAtStr) {
+            const loginAt = new Date(loginAtStr).getTime()
+            const now = Date.now()
+            const diffMs = now - loginAt
+            const diffDays = diffMs / (1000 * 60 * 60 * 24)
+            const maxDays = rememberFlag === '1' ? 30 : 7
+
+            console.log('⏰ Análisis de tiempo:', {
+              loginAt: new Date(loginAt).toISOString(),
+              now: new Date(now).toISOString(),
+              diffDays: diffDays.toFixed(2),
+              maxDays,
+              expired: diffDays > maxDays
+            })
+
+            if (diffDays > maxDays) {
+              console.log(`❌ Sesión expirada por política de ${maxDays} días. Cerrando sesión...`)
+              // Cerrar sesión en el servidor para limpiar cookies
+              await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {})
+              setUser(null)
+              setSession(null)
+              setProfile(null)
+              setLoading(false)
+              return
+            } else {
+              console.log(`✅ Sesión válida (${diffDays.toFixed(2)}/${maxDays} días)`)
+            }
+          } else {
+            console.log('ℹ️ No hay cookie de login, sesión nueva o limpia')
+          }
+        } catch (softErr) {
+          console.warn('Error comprobando expiración suave:', softErr)
         }
 
-        console.log("Sesión inicial obtenida:", session ? "Sesión activa" : "Sin sesión");
-        
-        setSession(session);
-        setUser(session?.user ?? null);
-
-        if (session?.user) {
-          console.log("Cargando perfil para usuario:", session.user.id);
-          const profileData = await loadProfile(session.user.id);
-          setProfile(profileData);
+        const res = await fetch('/api/auth/me', { method: 'GET' })
+        if (!res.ok) {
+          console.log('Sin sesión')
+          setUser(null)
+          setSession(null)
+          setLoading(false)
+          return
         }
 
-        setLoading(false);
+        const data: { user?: User | null } = await res.json()
+        const currentUser: User | null = data?.user ?? null
+
+        console.log('Sesión inicial obtenida:', currentUser ? 'Sesión activa' : 'Sin sesión')
+
+        setUser(currentUser)
+        setSession(null)
+        setLoading(false)
+
+        if (currentUser?.id) {
+          console.log('Cargando perfil para usuario:', currentUser.id)
+          loadProfile(currentUser.id).then((profileData) => {
+            setProfile(profileData)
+          })
+        }
       } catch (error) {
-        console.error("Error inesperado obteniendo sesión inicial:", error);
-        setLoading(false);
+        console.error('Error inesperado obteniendo sesión inicial:', error)
+        setLoading(false)
       }
-    };
+    }
 
-    getInitialSession();
+    getInitialSession()
+  }, [])
 
-    // Escuchar cambios de autenticación
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log("Cambio de estado de autenticación:", event, session ? "Sesión activa" : "Sin sesión");
-      
-      setSession(session);
-      setUser(session?.user ?? null);
 
-      if (session?.user) {
-        console.log("Cargando perfil para usuario:", session.user.id);
-        const profileData = await loadProfile(session.user.id);
-        setProfile(profileData);
-      } else {
-        console.log("Limpiando perfil - sin sesión");
-        setProfile(null);
-      }
-
-      setLoading(false);
-    });
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, []);
 
   const value: AuthContextType = {
     user,

@@ -20,33 +20,11 @@ interface ProfileFormProps {
 export default function ProfileForm({ onSave, className = '', showHeader = true }: ProfileFormProps) {
   const { user, profile, updateProfile, loading: authLoading } = useAuth()
   const { showSuccess, showError } = useToast()
-  
-  // Helper function to convert skill level number to string
-  const skillLevelToString = (level: number | null): SkillLevel => {
-    switch (level) {
-      case 1: return 'beginner'
-      case 2: return 'intermediate'
-      case 3: return 'advanced'
-      case 4: return 'professional'
-      default: return 'beginner'
-    }
-  }
-
-  // Helper function to convert skill level string to number
-  const skillLevelToNumber = (level: SkillLevel): number => {
-    switch (level) {
-      case 'beginner': return 1
-      case 'intermediate': return 2
-      case 'advanced': return 3
-      case 'professional': return 4
-      default: return 1
-    }
-  }
 
   const [formData, setFormData] = useState({
     fullName: '',
     phone: '',
-    skillLevel: 'beginner' as SkillLevel,
+    skillLevel: 1,
     preferredPosition: '' as PreferredPosition | '',
     bio: '',
     postalCode: '',
@@ -101,7 +79,7 @@ export default function ProfileForm({ onSave, className = '', showHeader = true 
         setFormData({
           fullName: profile.full_name || '',
           phone: profile.phone || '',
-          skillLevel: skillLevelToString(profile.skill_level),
+          skillLevel: profile.skill_level || 1,
           preferredPosition: profile.preferred_position || '',
           bio: profile.bio || '',
           postalCode: profile.postal_code || '',
@@ -127,54 +105,14 @@ export default function ProfileForm({ onSave, className = '', showHeader = true 
     loadProfileData()
   }, [profile])
 
-  // Efecto adicional para asegurar que los datos se carguen al montar el componente
-  useEffect(() => {
-    if (profile && formData.fullName === '' && formData.country === '') {
-      const loadProfileData = async () => {
-        let countryName = profile.country || '';
-        
-        // Si tenemos country_code pero no country, buscar el nombre del país
-        if (profile.country_code && !profile.country) {
-          try {
-            const countryData = await getCountryByCode(profile.country_code);
-            countryName = countryData?.country_name || '';
-          } catch (error) {
-            console.error('Error obteniendo nombre del país:', error);
-          }
-        }
-        
-        setFormData({
-          fullName: profile.full_name || '',
-          phone: profile.phone || '',
-          skillLevel: skillLevelToString(profile.skill_level),
-          preferredPosition: profile.preferred_position || '',
-          bio: profile.bio || '',
-          postalCode: profile.postal_code || '',
-          placeName: profile.place_name || '',
-          adminName1: profile.admin_name1 || '',
-          adminName2: profile.admin_name2 || '',
-          adminName3: profile.admin_name3 || '',
-          adminCode1: profile.admin_code1 || '',
-          adminCode2: profile.admin_code2 || '',
-          adminCode3: profile.admin_code3 || '',
-          latitude: profile.latitude || null,
-          longitude: profile.longitude || null,
-          city: profile.city || '',
-          country: countryName,
-          countryCode: profile.country_code || ''
-        })
-      }
-      
-      loadProfileData()
-    }
-  }, [profile, formData.fullName, formData.country]) // Incluir todas las dependencias necesarias
-
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }))
+
+    if (name === 'skillLevel') {
+      setFormData(prev => ({ ...prev, [name]: parseInt(value, 10) }))
+    } else {
+      setFormData(prev => ({ ...prev, [name]: value }))
+    }
     setHasChanges(true)
   }
 
@@ -188,7 +126,7 @@ export default function ProfileForm({ onSave, className = '', showHeader = true 
       } catch (error) {
         console.error('Error obteniendo nombre del país:', error);
         // Fallback: usar admin_name1 como antes
-        countryName = postalCode.admin_name1 || postalCode.admin_name2 || '';
+        countryName = postalCode.admin_name1 ?? postalCode.admin_name2 ?? '';
       }
     }
     
@@ -256,7 +194,7 @@ export default function ProfileForm({ onSave, className = '', showHeader = true 
       console.log('Enviando datos del perfil:', {
         full_name: formData.fullName.trim(),
         phone: formData.phone.trim() || null,
-        skill_level: skillLevelToNumber(formData.skillLevel),
+        skill_level: formData.skillLevel,
         preferred_position: formData.preferredPosition === '' ? null : formData.preferredPosition,
         bio: formData.bio.trim() || null,
         postal_code: formData.postalCode.trim() || null,
@@ -277,7 +215,7 @@ export default function ProfileForm({ onSave, className = '', showHeader = true 
       const { error } = await updateProfile({
         full_name: formData.fullName.trim(),
         phone: formData.phone.trim() || null,
-        skill_level: skillLevelToNumber(formData.skillLevel),
+        skill_level: formData.skillLevel,
         preferred_position: formData.preferredPosition === '' ? null : formData.preferredPosition,
         bio: formData.bio.trim() || null,
         postal_code: formData.postalCode.trim() || null,
@@ -322,18 +260,18 @@ export default function ProfileForm({ onSave, className = '', showHeader = true 
       // Si tenemos country_code pero no country, buscar el nombre del país
       if (profile.country_code && !profile.country) {
         try {
-          const countryData = await getCountryByCode(profile.country_code);
-          countryName = countryData?.country_name || '';
+          const countryData = await getCountryByCode(profile.country_code)
+          countryName = countryData?.country_name || ''
         } catch (error) {
-          console.error('Error obteniendo nombre del país:', error);
+          console.error('Error obteniendo nombre del país:', error)
         }
       }
-      
+
       setFormData({
         fullName: profile.full_name || '',
         phone: profile.phone || '',
-        skillLevel: skillLevelToString(profile.skill_level),
-        preferredPosition: profile.preferred_position || 'both',
+        skillLevel: profile.skill_level || 1,
+        preferredPosition: profile.preferred_position || '',
         bio: profile.bio || '',
         postalCode: profile.postal_code || '',
         placeName: profile.place_name || '',
@@ -487,7 +425,7 @@ export default function ProfileForm({ onSave, className = '', showHeader = true 
             <div>
             
               <PostalCodeAutocomplete
-                value={formData.postalCode ? `${formData.postalCode} - ${formData.placeName || formData.city}, ${formData.adminName1 || formData.country}` : ''}
+                value={formData.postalCode}
                 countryCode={formData.countryCode}
                 onChange={handlePostalCodeSelect}
                 placeholder="Ingresa tu código postal..."
@@ -544,10 +482,10 @@ export default function ProfileForm({ onSave, className = '', showHeader = true 
                 className="w-full px-4 py-3 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-accent-primary focus:border-transparent transition-colors font-open-sans bg-bg-main text-text-main"
                 disabled={loading}
               >
-                <option value="beginner">Principiante</option>
-                <option value="intermediate">Intermedio</option>
-                <option value="advanced">Avanzado</option>
-                <option value="professional">Profesional</option>
+                <option value={1}>Principiante</option>
+                <option value={2}>Intermedio</option>
+                <option value={3}>Avanzado</option>
+                <option value={4}>Profesional</option>
               </select>
             </div>
 

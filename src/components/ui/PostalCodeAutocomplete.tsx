@@ -66,7 +66,7 @@ export default function PostalCodeAutocomplete({
     if (value !== query) {
       setQuery(value);
     }
-  }, [value]);
+  }, [value, query]);
 
   // Función de búsqueda con debounce
   useEffect(() => {
@@ -152,7 +152,7 @@ export default function PostalCodeAutocomplete({
         break;
       case "Enter":
         e.preventDefault();
-        if (selectedIndex >= 0 && results[selectedIndex]) {
+        if (selectedIndex >= 0 && selectedIndex < results.length) {
           handleSelect(results[selectedIndex]);
         }
         break;

@@ -4,10 +4,11 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
-import ProfileForm from '@/components/auth/ProfileForm'
+import ProfileForm from '@/components/dashboard/ProfileForm'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
 import { useToast } from '@/contexts/ToastContext'
+// import { Tables } from '@/lib/types/supabase' // eliminado: tipos basados en columnas inexistentes
 
 interface NotificationSettings {
   email_matches: boolean
@@ -17,18 +18,16 @@ interface NotificationSettings {
   push_groups: boolean
   push_reminders: boolean
 }
-
 interface GamePreferences {
   preferred_time_slots: string[]
   preferred_days: string[]
   max_travel_distance: number
-  preferred_court_type: 'indoor' | 'outdoor' | 'both'
-  competitive_level: 'casual' | 'competitive' | 'both'
+  preferred_court_type: 'both' | 'indoor' | 'outdoor'
+  competitive_level: 'both' | 'friendly' | 'competitive'
 }
 
 interface RecentMatch {
   opponent: string
-  resultLabel: string
   outcome: 'win' | 'loss'
 }
 
@@ -100,25 +99,17 @@ export default function ProfilePage() {
   })
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
-  const [userStats] = useState({ played: 24, wins: 16, losses: 8 })
-  const [recentMatches] = useState<RecentMatch[]>([
-    { opponent: 'Carlos M.', resultLabel: '6-4, 6-2', outcome: 'win' },
-    { opponent: 'Ana L.', resultLabel: '4-6, 6-3, 6-4', outcome: 'win' },
-    { opponent: 'Miguel R.', resultLabel: '6-7, 4-6', outcome: 'loss' },
-    { opponent: 'Sofia P.', resultLabel: '6-3, 6-1', outcome: 'win' },
-    { opponent: 'Diego F.', resultLabel: '5-7, 6-4, 4-6', outcome: 'loss' }
-  ])
-  const [myGroups] = useState<UserGroup[]>([
-    { name: 'Club Norte', members: 23 },
-    { name: 'Amigos Pádel', members: 12 },
-    { name: 'Weekend Squad', members: 8 },
-    { name: 'Mixto Padel', members: 16 }
-  ])
+  const [recentMatches, setRecentMatches] = useState<RecentMatch[]>([])
+  const [myGroups, setMyGroups] = useState<UserGroup[]>([])
 
   const loadUserSettings = useCallback(async () => {
     try {
-      if (profile?.avatar_url) {
-        setAvatarUrl(profile.avatar_url)
+      if (profile) {
+        if (profile.avatar_url) {
+          setAvatarUrl(profile.avatar_url)
+        }
+        // Las columnas notification_settings y game_preferences no existen actualmente en profiles
+        // Se mantienen valores por defecto en estado local
       }
     } catch (error) {
       console.error('Error loading user settings:', error)
@@ -128,6 +119,8 @@ export default function ProfilePage() {
   useEffect(() => {
     if (user) {
       loadUserSettings()
+      fetchRecentMatches()
+      fetchMyGroups()
     }
   }, [user, loadUserSettings])
 
@@ -149,7 +142,8 @@ export default function ProfilePage() {
 
   const saveNotificationSettings = async () => {
     try {
-      showSuccess('Configuración de notificaciones guardada correctamente')
+      // Persistencia deshabilitada: la columna 'notification_settings' no existe en profiles
+      showSuccess('Configuración de notificaciones actualizada')
     } catch (error) {
       console.error('Error saving notification settings:', error)
       showError('Error al guardar la configuración de notificaciones')
@@ -158,7 +152,8 @@ export default function ProfilePage() {
 
   const saveGamePreferences = async () => {
     try {
-      showSuccess('Preferencias de juego guardadas correctamente')
+      // Persistencia deshabilitada: la columna 'game_preferences' no existe en profiles
+      showSuccess('Preferencias de juego actualizadas')
     } catch (error) {
       console.error('Error saving game preferences:', error)
       showError('Error al guardar las preferencias de juego')
@@ -353,15 +348,15 @@ export default function ProfilePage() {
                           
                           <div className="grid grid-cols-3 gap-3 text-center">
                             <div className="bg-bg-main rounded-lg p-3">
-                              <div className="text-xl font-bold text-accent-primary">{userStats.played}</div>
+                              <div className="text-xl font-bold text-accent-primary">N/A</div>
                               <div className="text-xs text-text-secondary">Jugados</div>
                             </div>
                             <div className="bg-bg-main rounded-lg p-3">
-                              <div className="text-xl font-bold text-green-500">{userStats.wins}</div>
+                              <div className="text-xl font-bold text-green-500">N/A</div>
                               <div className="text-xs text-text-secondary">Ganados</div>
                             </div>
                             <div className="bg-bg-main rounded-lg p-3">
-                              <div className="text-xl font-bold text-red-500">{userStats.losses}</div>
+                              <div className="text-xl font-bold text-red-500">N/A</div>
                               <div className="text-xs text-text-secondary">Perdidos</div>
                             </div>
                           </div>
@@ -372,15 +367,7 @@ export default function ProfilePage() {
                       <div className="lg:col-span-2 bg-bg-secondary rounded-lg p-6 border border-border">
                         <h4 className="font-semibold text-text-main mb-4 text-lg">Partidos Recientes</h4>
                         <div className="space-y-3">
-                          {recentMatches.slice(0, 4).map((match, index) => (
-                            <div key={index} className="flex items-center justify-between py-3 px-4 bg-bg-main rounded-lg border border-border">
-                              <div className="flex items-center gap-3">
-                                <div className={`w-3 h-3 rounded-full ${match.outcome === 'win' ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                                <span className="text-sm font-medium text-text-main">{match.opponent}</span>
-                              </div>
-                              <span className="text-xs text-text-secondary bg-bg-secondary px-2 py-1 rounded">{match.resultLabel}</span>
-                            </div>
-                          ))}
+                          <p className="text-text-secondary">Próximamente...</p>
                         </div>
                       </div>
                     </div>
@@ -738,3 +725,26 @@ export default function ProfilePage() {
     </ProtectedRoute>
   )
 }
+
+interface NotificationSettings {
+  email_matches: boolean
+  email_groups: boolean
+  email_reminders: boolean
+  push_matches: boolean
+  push_groups: boolean
+  push_reminders: boolean
+}
+interface GamePreferences {
+  preferred_time_slots: string[]
+  preferred_days: string[]
+  max_travel_distance: number
+  preferred_court_type: 'both' | 'indoor' | 'outdoor'
+  competitive_level: 'both' | 'friendly' | 'competitive'
+}
+
+// Eliminar bloque duplicado y fuera de scope:
+// interface NotificationSettings { ... }
+// interface GamePreferences { ... }
+// if (profile) { ... }
+// showSuccess('Configuración de notificaciones actualizada')
+// showSuccess('Preferencias de juego actualizadas')

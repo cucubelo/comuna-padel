@@ -51,10 +51,10 @@ export default function PerformanceChart({
 
   const renderLineChart = () => {
     const points = data.map((item, index) => {
-      const x = (index / (data.length - 1)) * 100
-      const y = 100 - (item.value / maxValue) * 80 // 80% of height for padding
-      return `${x},${y}`
-    }).join(' ')
+      const x = data.length > 1 ? (index / (data.length - 1)) * 100 : 50; // Center if only one point
+      const y = 100 - (item.value / maxValue) * 80; // 80% of height for padding
+      return `${x},${y}`;
+    }).join(' ');
 
     return (
       <div className="relative">

@@ -7,10 +7,7 @@ import { supabase } from '@/lib/supabase'
 interface ProfileData {
   full_name: string
   phone: string
-  birth_date: string
-  location: string
-  skill_level: 'beginner' | 'intermediate' | 'advanced' | 'expert'
-  playing_style: 'aggressive' | 'defensive' | 'balanced'
+  skill_level: number
   bio: string
 }
 
@@ -26,10 +23,7 @@ export default function ProfileForm({ onSave, className = '' }: ProfileFormProps
   const [profile, setProfile] = useState<ProfileData>({
     full_name: '',
     phone: '',
-    birth_date: '',
-    location: '',
-    skill_level: 'beginner',
-    playing_style: 'balanced',
+    skill_level: 1,
     bio: ''
   })
 
@@ -53,10 +47,7 @@ export default function ProfileForm({ onSave, className = '' }: ProfileFormProps
         setProfile({
           full_name: data.full_name || '',
           phone: data.phone || '',
-          birth_date: data.birth_date || '',
-          location: data.location || '',
-          skill_level: data.skill_level || 'beginner',
-          playing_style: data.playing_style || 'balanced',
+          skill_level: data.skill_level || 1,
           bio: data.bio || ''
         })
       }
@@ -80,11 +71,7 @@ export default function ProfileForm({ onSave, className = '' }: ProfileFormProps
     try {
       const { error } = await supabase
         .from('profiles')
-        .upsert({
-          id: user.id,
-          ...profile,
-          updated_at: new Date().toISOString()
-        })
+        .upsert([{ id: user.id, ...profile }]);
 
       if (error) {
         console.error('Error saving profile:', error)
@@ -104,7 +91,7 @@ export default function ProfileForm({ onSave, className = '' }: ProfileFormProps
     }
   }
 
-  const handleInputChange = (field: keyof ProfileData, value: string) => {
+  const handleInputChange = (field: keyof ProfileData, value: string | number) => {
     setProfile(prev => ({
       ...prev,
       [field]: value
@@ -150,31 +137,6 @@ export default function ProfileForm({ onSave, className = '' }: ProfileFormProps
               placeholder="Ej: +00 000 000 0000"
             />
           </div>
-
-          <div>
-            <label className="block text-sm font-medium text-text-main mb-2">
-              Fecha de Nacimiento
-            </label>
-            <input
-              type="date"
-              value={profile.birth_date}
-              onChange={(e) => handleInputChange('birth_date', e.target.value)}
-              className="w-full px-3 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-accent-primary bg-bg-main text-text-main"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-text-main mb-2">
-              Ubicación
-            </label>
-            <input
-              type="text"
-              value={profile.location}
-              onChange={(e) => handleInputChange('location', e.target.value)}
-              className="w-full px-3 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-accent-primary bg-bg-main text-text-main"
-              placeholder="Ciudad, País"
-            />
-          </div>
         </div>
 
         {/* Información de Juego */}
@@ -185,28 +147,13 @@ export default function ProfileForm({ onSave, className = '' }: ProfileFormProps
             </label>
             <select
               value={profile.skill_level}
-              onChange={(e) => handleInputChange('skill_level', e.target.value)}
+              onChange={(e) => handleInputChange('skill_level', parseInt(e.target.value, 10))}
               className="w-full px-3 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-accent-primary bg-bg-main text-text-main"
             >
-              <option value="beginner">Principiante</option>
-              <option value="intermediate">Intermedio</option>
-              <option value="advanced">Avanzado</option>
-              <option value="expert">Experto</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-text-main mb-2">
-              Estilo de Juego
-            </label>
-            <select
-              value={profile.playing_style}
-              onChange={(e) => handleInputChange('playing_style', e.target.value)}
-              className="w-full px-3 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-accent-primary bg-bg-main text-text-main"
-            >
-              <option value="aggressive">Agresivo</option>
-              <option value="defensive">Defensivo</option>
-              <option value="balanced">Equilibrado</option>
+              <option value="1">Principiante</option>
+              <option value="2">Intermedio</option>
+              <option value="3">Avanzado</option>
+              <option value="4">Experto</option>
             </select>
           </div>
         </div>

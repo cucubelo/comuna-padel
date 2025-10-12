@@ -58,11 +58,11 @@ export default function RegisterForm({ onToggleMode }: RegisterFormProps) {
       const { error } = await signUp(formData.email, formData.password, {
         full_name: formData.fullName,
         // Los demás campos se completarán en el dashboard
-        phone: null,
-        skill_level: 'principiante', // Valor por defecto
+        phone: '',
+        skill_level: 1, // Valor por defecto
         preferred_position: 'ambas', // Valor por defecto
-        bio: null,
-        location: null
+        bio: '',
+        location: ''
       })
 
       if (error) {

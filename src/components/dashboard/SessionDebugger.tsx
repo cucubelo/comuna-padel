@@ -3,11 +3,17 @@
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
-import { Session, AuthError } from '@supabase/supabase-js'
+import { Session, AuthError, User } from '@supabase/supabase-js'
 
 interface SessionInfo {
   session: Session | null
   error: AuthError | null
+}
+
+interface SessionLike {
+  user: User;
+  access_token: string;
+  refresh_token: string;
 }
 
 export default function SessionDebugger() {
@@ -17,8 +23,8 @@ export default function SessionDebugger() {
 
   useEffect(() => {
     const getSessionInfo = async () => {
-      const { data: { session }, error } = await supabase.auth.getSession()
-      setSessionInfo({ session, error })
+      const { data: { session }, error } = await supabase.auth.getSession();
+      setSessionInfo({ session, error });
     }
     
     if (isVisible) {

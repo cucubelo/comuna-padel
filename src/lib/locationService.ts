@@ -1,16 +1,19 @@
 import { supabase } from "./supabase";
+import type { Database } from "@/lib/types/supabase";
 
 export interface Location {
-  id?: string;
+  id: string;
   name: string;
   display_name: string;
-  city?: string;
-  state?: string;
+  city?: string | null;
+  state?: string | null;
   country: string;
   country_code: string;
-  latitude?: number;
-  longitude?: number;
-  search_count?: number;
+  latitude?: number | null;
+  longitude?: number | null;
+  search_count?: number | null;
+  class?: string;
+  type?: string;
 }
 
 interface NominatimResult {
@@ -19,6 +22,8 @@ interface NominatimResult {
   display_name: string;
   lat: string;
   lon: string;
+  class?: string;
+  type?: string;
   address?: {
     city?: string;
     town?: string;
@@ -78,138 +83,76 @@ class LocationService {
   ): Promise<Location[]> {
     try {
       const normalizedQuery = this.normalizeText(query);
-      console.log("🔍 Búsqueda local:", {
-        query,
-        normalizedQuery,
-        countryCode,
-      });
 
-      // Búsqueda más flexible usando ILIKE para coincidencias parciales
+      // TODO: Usar un campo de full-text search en la base de datos para mejorar performance
       let queryBuilder = supabase
-        .from("popular_locations")
+        .from("postal_codes")
         .select("*")
-        .or(`name.ilike.%${query}%,display_name.ilike.%${query}%,city.ilike.%${query}%`)
+        .or(`place_name.ilike.%${normalizedQuery}%,admin_name1.ilike.%${normalizedQuery}%,admin_name2.ilike.%${normalizedQuery}%,admin_name3.ilike.%${normalizedQuery}%,postal_code.ilike.%${normalizedQuery}%`)
         .order("search_count", { ascending: false })
         .limit(limit);
 
       if (countryCode) {
-        console.log("🌍 Filtrando por país:", countryCode.toUpperCase());
         queryBuilder = queryBuilder.eq(
           "country_code",
           countryCode.toUpperCase()
         );
       }
 
-      console.log("🔍 Ejecutando consulta optimizada...");
       const { data, error } = await queryBuilder;
 
       if (error) {
-        console.warn("⚠️ Error with query:", error);
+        console.warn("⚠️ Error with local search query:", error);
         return [];
       }
 
-      console.log(
-        "📊 Resultados obtenidos:",
-        data?.length || 0,
-        "registros"
-      );
-      
-      // Mostrar algunos resultados para debug
-      if (data && data.length > 0) {
-        console.log("🔍 Primeros resultados:", data.slice(0, 3).map(item => ({
-          name: item.name,
-          display_name: item.display_name,
-          country: item.country
-        })));
-      }
+      const rows = (data ?? []) as Database["public"]["Tables"]["postal_codes"]["Row"][];
+      return rows.map((row) => ({
+        id: row.id,
+        name: row.place_name,
+        display_name: `${row.place_name}, ${row.admin_name1 || row.admin_name2 || row.admin_name3 || ""}`.trim(),
+        city: row.admin_name3 ?? undefined,
+        state: row.admin_name1 ?? row.admin_name2 ?? undefined,
+        country: this.getCountryInfo(row.country_code)?.name || row.country_code,
+        country_code: row.country_code,
+        latitude: row.latitude ?? undefined,
+        longitude: row.longitude ?? undefined,
+        search_count: row.search_count ?? undefined,
+      }));
 
-      return data || [];
     } catch (error) {
       console.error("❌ Error in searchLocal:", error);
       return [];
     }
   }
 
-  /**
-   * Detectar si el navegador es Brave
-   */
-  private isBraveBrowser(): boolean {
-    return (
-      (navigator as Navigator & { brave?: { isBrave: boolean } }).brave
-        ?.isBrave || false
-    );
+
+
+  private mapNominatimToLocation(result: NominatimResult): Location {
+    const address = result.address;
+    const country_code = address?.country_code ?? '';
+    const country = this.extractCountryFromAddress(address);
+
+    return {
+      id: String(result.place_id),
+      name: result.name,
+      display_name: result.display_name,
+      city: address ? (address.city || address.town || address.village) : undefined,
+      state: address ? address.state : undefined,
+      country,
+      country_code,
+      latitude: parseFloat(result.lat),
+      longitude: parseFloat(result.lon),
+      class: result.class,
+      type: result.type,
+    };
   }
 
-  /**
-   * Mapear resultado de Nominatim a Location
-   */
-  private mapNominatimToLocation = (item: NominatimResult): Location => ({
-    id: item.place_id?.toString() || Math.random().toString(),
-    name: this.extractCityName(item),
-    display_name: item.display_name,
-    city:
-      item.address?.city || item.address?.town || item.address?.village || "",
-    state:
-      item.address?.state ||
-      item.address?.province ||
-      item.address?.region ||
-      "",
-    country: item.address?.country || "",
-    country_code: item.address?.country_code?.toUpperCase() || "",
-    latitude: parseFloat(item.lat),
-    longitude: parseFloat(item.lon),
-  });
-
-  /**
-   * Extraer código de país de la dirección
-   */
-  private extractCountryFromAddress(location: Location): string {
-    // Primero intentar con country_code si existe
-    if (location.country_code) {
-      return location.country_code;
+  private extractCountryFromAddress(address: NominatimResult['address']): string {
+    if (!address) {
+      return "";
     }
-
-    // Si no hay country_code, intentar extraer del display_name
-    const displayName = location.display_name.toLowerCase();
-    
-    // Mapeo de nombres de países a códigos
-    const countryMapping: { [key: string]: string } = {
-      'spain': 'ES',
-      'españa': 'ES',
-      'argentina': 'AR',
-      'ecuador': 'EC',
-      'mexico': 'MX',
-      'méxico': 'MX',
-      'colombia': 'CO',
-      'chile': 'CL',
-      'peru': 'PE',
-      'perú': 'PE',
-      'venezuela': 'VE',
-      'uruguay': 'UY',
-      'paraguay': 'PY',
-      'bolivia': 'BO',
-      'brasil': 'BR',
-      'brazil': 'BR',
-      'costa rica': 'CR',
-      'panama': 'PA',
-      'panamá': 'PA',
-      'guatemala': 'GT',
-      'honduras': 'HN',
-      'el salvador': 'SV',
-      'nicaragua': 'NI',
-      'cuba': 'CU',
-      'república dominicana': 'DO',
-      'dominican republic': 'DO'
-    };
-
-    // Buscar coincidencias en el display_name
-    for (const [countryName, countryCode] of Object.entries(countryMapping)) {
-      if (displayName.includes(countryName)) {
-        return countryCode;
-      }
-    }
-
-    return "";
+    return address.country ?? "";
   }
 
   /**
@@ -222,13 +165,13 @@ class LocationService {
   /**
    * Buscar ubicaciones en OpenStreetMap Nominatim
    */
-  private async searchNominatim(
+  public async searchNominatim(
     query: string,
-    countryFilter?: string
+    countryCode?: string
   ): Promise<Location[]> {
     console.log("🌐 Iniciando búsqueda en Nominatim API:", {
       query,
-      countryFilter,
+      countryCode,
     });
 
     try {
@@ -236,18 +179,15 @@ class LocationService {
       // Excluimos calles, edificios, puntos de interés específicos
       let url = `https://nominatim.openstreetmap.org/search?format=json&limit=8&q=${encodeURIComponent(
         query
-      )}&class=place&type=city,town,village,municipality,island,state,province&addressdetails=1`;
+      )}&addressdetails=1`;
       
-      if (countryFilter) {
-        url += `&countrycodes=${countryFilter.toLowerCase()}`;
+      if (countryCode) {
+        url += `&countrycodes=${countryCode.toLowerCase()}`;
       }
-
-      console.log("📡 URL de la API:", url);
 
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 8000);
 
-      console.log("⏳ Realizando petición HTTP...");
       const response = await fetch(url, {
         signal: controller.signal,
         headers: {
@@ -262,8 +202,6 @@ class LocationService {
         return [];
       }
 
-      console.log("📥 Respuesta recibida:", response.status);
-
       const data: NominatimResult[] = await response.json();
 
       if (!Array.isArray(data)) {
@@ -271,30 +209,15 @@ class LocationService {
         return [];
       }
 
-      console.log("📊 Datos JSON recibidos:", data.length, "elementos");
-
       // Mapear y filtrar solo por países soportados Y nivel administrativo apropiado
       const locations = data
         .map(this.mapNominatimToLocation)
         .filter((location) => {
-          const country = this.extractCountryFromAddress(location);
-          const isSupported = this.supportedCountries.includes(country);
-          
-          // Filtrar por nivel administrativo - solo localidades, no calles ni edificios
+          const isSupported = this.supportedCountries.includes(location.country_code.toUpperCase());
           const isAppropriateLevel = this.isAppropriateAdministrativeLevel(location);
-
-          console.log("🔍 Evaluando ubicación:", {
-            name: location.name,
-            display_name: location.display_name,
-            country,
-            isSupported,
-            isAppropriateLevel,
-          });
-
           return isSupported && isAppropriateLevel;
         });
 
-      console.log("✅ Ubicaciones filtradas de Nominatim:", locations.length);
       return locations;
     } catch (error) {
       if (error instanceof Error && error.name === "AbortError") {
@@ -313,72 +236,36 @@ class LocationService {
    * NO queremos: calles, edificios, restaurantes, tiendas
    */
   private isAppropriateAdministrativeLevel(location: Location): boolean {
+    const type = location.type;
     const displayName = location.display_name.toLowerCase();
-    
-    // Palabras que indican que NO es una localidad apropiada (NEGOCIOS Y ESTABLECIMIENTOS)
-    const inappropriateKeywords = [
-      // Calles y vías
-      'calle', 'street', 'avenida', 'avenue', 'carretera', 'road', 'camino', 'path',
-      'paseo', 'boulevard', 'ronda', 'travesía', 'callejón', 'alley',
-      
-      // Negocios de comida y bebida
-      'restaurante', 'restaurant', 'hotel', 'bar', 'café', 'cafe', 'pizzería', 'pizzeria',
-      'panadería', 'bakery', 'pastelería', 'pastry', 'heladería', 'ice cream',
-      'taberna', 'tavern', 'pub', 'discoteca', 'nightclub', 'club nocturno',
-      
-      // Tiendas y comercios
-      'tienda', 'shop', 'store', 'centro comercial', 'mall', 'supermercado', 'supermarket',
-      'farmacia', 'pharmacy', 'librería', 'bookstore', 'boutique', 'mercado', 'market',
-      'gasolinera', 'gas station', 'taller', 'workshop', 'peluquería', 'hairdresser',
-      
-      // Servicios y edificios públicos
-      'hospital', 'clínica', 'clinic', 'consultorio', 'office', 'oficina',
-      'escuela', 'school', 'colegio', 'universidad', 'university', 'instituto', 'institute',
-      'biblioteca', 'library', 'museo', 'museum', 'teatro', 'theater', 'cine', 'cinema',
-      
-      // Transporte e infraestructura
-      'aeropuerto', 'airport', 'estación', 'station', 'puerto', 'port', 'terminal',
-      'aparcamiento', 'parking', 'garaje', 'garage', 'gasolinera', 'petrol station',
-      
-      // Espacios y lugares específicos
-      'plaza', 'square', 'parque', 'park', 'jardín', 'garden', 'cementerio', 'cemetery',
-      'iglesia', 'church', 'catedral', 'cathedral', 'mezquita', 'mosque',
-      'estadio', 'stadium', 'polideportivo', 'sports center', 'gimnasio', 'gym',
-      
-      // Otros establecimientos
-      'banco', 'bank', 'cajero', 'atm', 'correos', 'post office', 'ayuntamiento', 'city hall',
-      'comisaría', 'police station', 'bomberos', 'fire station', 'juzgado', 'courthouse'
+
+    const allowedTypes = [
+      'city', 'town', 'village', 'hamlet', 'municipality', 'county', 
+      'province', 'state', 'region', 'island', 'archipelago'
     ];
 
-    // Si contiene palabras inapropiadas, rechazar
+    if (type && allowedTypes.includes(type)) {
+      return true;
+    }
+
+    // Fallback para casos donde el tipo no es suficiente
+    const inappropriateKeywords = [
+      'calle', 'street', 'avenida', 'avenue', 'carretera', 'road', 'camino', 'path',
+      'restaurante', 'restaurant', 'hotel', 'bar', 'café', 'cafe',
+      'tienda', 'shop', 'store', 'supermercado', 'supermarket',
+      'hospital', 'clínica', 'clinic',
+      'aeropuerto', 'airport', 'estación', 'station',
+      'plaza', 'square', 'parque', 'park',
+      'iglesia', 'church', 'museo', 'museum'
+    ];
+
     for (const keyword of inappropriateKeywords) {
-      if (displayName.includes(keyword)) {
+      if (displayName.includes(` ${keyword} `) || displayName.startsWith(keyword) || displayName.endsWith(keyword)) {
         return false;
       }
     }
 
-    // Palabras que indican que SÍ es una localidad apropiada
-    const appropriateKeywords = [
-      'ciudad', 'city', 'pueblo', 'town', 'villa', 'village',
-      'municipio', 'municipality', 'isla', 'island', 'islas', 'islands',
-      'provincia', 'province', 'comunidad', 'community', 'región', 'region',
-      'estado', 'state', 'departamento', 'department'
-    ];
-
-    // Si contiene palabras apropiadas, aceptar
-    for (const keyword of appropriateKeywords) {
-      if (displayName.includes(keyword)) {
-        return true;
-      }
-    }
-
-    // Si el nombre es corto y simple (probablemente una ciudad), aceptar
-    if (location.name.length <= 30 && !location.name.includes(',')) {
-      return true;
-    }
-
-    // Por defecto, ser conservador y rechazar
-    return false;
+    return true; // Ser más permisivo si no se encuentra un keyword inapropiado
   }
 
   /**
@@ -442,9 +329,9 @@ class LocationService {
   /**
    * Búsqueda híbrida principal: BD local primero, luego API
    */
-  async searchLocations(
+ public async searchLocations(
     query: string,
-    countryFilter?: string
+    countryCode?: string
   ): Promise<Location[]> {
     const trimmedQuery = query.trim();
     if (!trimmedQuery) return [];
@@ -452,32 +339,27 @@ class LocationService {
     console.log("🔍 Iniciando búsqueda híbrida para:", trimmedQuery);
 
     // Buscar en ubicaciones locales primero
-    const localResults = await this.searchLocal(trimmedQuery, countryFilter);
-    console.log("📍 Resultados locales:", localResults.length);
+    const localResults = await this.searchLocal(trimmedQuery, countryCode);
 
     // Evaluar si necesitamos complementar con API externa
     let nominatimResults: Location[] = [];
     const hasGoodMatch = this.hasGoodLocalMatch(trimmedQuery, localResults);
 
     if (!hasGoodMatch) {
-      console.log(
-        "🌍 No hay coincidencias exactas locales, buscando en OpenStreetMap/Nominatim..."
-      );
       nominatimResults = await this.searchNominatim(
         trimmedQuery,
-        countryFilter
-      );
-      console.log("🗺️ Resultados de Nominatim:", nominatimResults.length);
-    } else {
-      console.log(
-        "✅ Buenas coincidencias locales encontradas, omitiendo búsqueda en API externa"
+        countryCode
       );
     }
 
     const combinedResults = [...localResults, ...nominatimResults];
-    console.log("✅ Total de resultados combinados:", combinedResults.length);
 
-    return combinedResults;
+    // Eliminar duplicados, dando prioridad a los resultados locales
+    const uniqueResults = Array.from(
+      new Map(combinedResults.map((loc) => [loc.display_name, loc])).values()
+    );
+
+    return uniqueResults;
   }
 
   /**
@@ -499,7 +381,7 @@ class LocationService {
   ): Promise<Location[]> {
     try {
       const { data, error } = await supabase
-        .from("popular_locations")
+        .from("postal_codes")
         .select("*")
         .eq("country_code", countryCode.toUpperCase())
         .order("search_count", { ascending: false })
@@ -523,7 +405,7 @@ class LocationService {
   async getTopLocations(limit = 20): Promise<Location[]> {
     try {
       const { data, error } = await supabase
-        .from("popular_locations")
+        .from("postal_codes")
         .select("*")
         .order("search_count", { ascending: false })
         .limit(limit);
@@ -545,18 +427,8 @@ class LocationService {
    */
   private async incrementSearchCount(locations: Location[]): Promise<void> {
     try {
-      for (const location of locations) {
-        if (location.id) {
-          // Usar SQL directo para incrementar el contador
-          const { error } = await supabase.rpc("increment_search_count", {
-            location_id: location.id,
-          });
-
-          if (error) {
-            console.warn("Error incrementing search count:", error);
-          }
-        }
-      }
+      // No-op: contador de búsquedas deshabilitado desde locationService para postal_codes
+      return;
     } catch (error) {
       console.error("Error incrementing search count:", error);
     }
@@ -567,26 +439,8 @@ class LocationService {
    */
   private async savePopularLocations(locations: Location[]): Promise<void> {
     try {
-      const locationsToSave = locations
-        .filter((loc) => loc.name && loc.country_code)
-        .map((loc) => ({
-          name: loc.name,
-          display_name: loc.display_name,
-          city: loc.city,
-          state: loc.state,
-          country: loc.country,
-          country_code: loc.country_code,
-          latitude: loc.latitude,
-          longitude: loc.longitude,
-          search_count: 1,
-        }));
-
-      if (locationsToSave.length > 0) {
-        await supabase.from("popular_locations").upsert(locationsToSave, {
-          onConflict: "name,country_code",
-          ignoreDuplicates: true,
-        });
-      }
+      // No-op: almacenamiento de ubicaciones populares deshabilitado (no existe tabla popular_locations)
+      return;
     } catch (error) {
       console.error("Error saving popular locations:", error);
     }
@@ -598,9 +452,9 @@ class LocationService {
   async getCountryCodeByCity(cityName: string): Promise<string | null> {
     try {
       const { data, error } = await supabase
-        .from("popular_locations")
-        .select("country_code")
-        .ilike("name", `%${cityName}%`)
+        .from("postal_codes")
+        .select("country_code, place_name, admin_name3")
+        .or(`place_name.ilike.%${cityName}%,admin_name3.ilike.%${cityName}%`)
         .limit(1)
         .single();
 

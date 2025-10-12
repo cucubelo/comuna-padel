@@ -32,17 +32,12 @@ interface MatchFormErrors {
 interface Group {
   id: string
   name: string
-  city?: string
-  country_code?: string
+  city?: string | null
+  country_code?: string | null
 }
 
 interface GroupMemberWithGroups {
-  groups: {
-    id: string
-    name: string
-    city?: string
-    country_code?: string
-  }[] | null
+  groups: Group[] | null
 }
 
 export default function CreateMatchModal({ isOpen, onClose, onSubmit, userId }: CreateMatchModalProps) {
@@ -76,16 +71,9 @@ export default function CreateMatchModal({ isOpen, onClose, onSubmit, userId }: 
 
       if (error) throw error
 
-      const groups: Group[] = data?.map((item: GroupMemberWithGroups) => {
-        if (!item.groups || !item.groups[0]) return null
-        const group = item.groups[0]
-        return {
-          id: group.id,
-          name: group.name,
-          city: group.city,
-          country_code: group.country_code
-        }
-      }).filter(group => group !== null) as Group[] || []
+      const groups: Group[] = data
+        ?.flatMap((item: GroupMemberWithGroups) => item.groups || [])
+        .filter((group): group is Group => group !== null) || [];
 
       setUserGroups(groups)
     } catch (error) {
@@ -148,8 +136,8 @@ export default function CreateMatchModal({ isOpen, onClose, onSubmit, userId }: 
       newErrors.location_name = 'La ubicación es requerida'
     }
 
-    if (formData.required_skill_level !== null && formData.required_skill_level !== undefined && (formData.required_skill_level < 1 || formData.required_skill_level > 7)) {
-      newErrors.required_skill_level = 'El nivel debe estar entre 1 y 7'
+    if (formData.required_skill_level !== null && formData.required_skill_level !== undefined && (formData.required_skill_level < 1 || formData.required_skill_level > 4)) {
+      newErrors.required_skill_level = 'El nivel debe estar entre 1 y 4'
     }
 
     setErrors(newErrors)
@@ -205,7 +193,7 @@ export default function CreateMatchModal({ isOpen, onClose, onSubmit, userId }: 
     }
   }
 
-  const handleInputChange = (field: keyof MatchFormData, value: string | number | boolean | null) => {
+  const handleInputChange = <K extends keyof MatchFormData>(field: K, value: MatchFormData[K]) => {
     setFormData(prev => ({ ...prev, [field]: value }))
     // Clear error when user starts typing
     if (field in errors && errors[field as keyof MatchFormErrors]) {
@@ -215,9 +203,8 @@ export default function CreateMatchModal({ isOpen, onClose, onSubmit, userId }: 
 
   // Get minimum date (tomorrow)
   const getMinDate = () => {
-    const tomorrow = new Date()
-    tomorrow.setDate(tomorrow.getDate() + 1)
-    return tomorrow.toISOString().slice(0, 16)
+    const now = new Date()
+    return now.toISOString().slice(0, 16)
   }
 
   if (!isOpen) return null
@@ -336,19 +323,19 @@ export default function CreateMatchModal({ isOpen, onClose, onSubmit, userId }: 
           {/* Required Skill Level */}
           <div>
             <label className="block text-sm font-medium text-text-main font-open-sans mb-2">
-              Nivel Requerido (1-10)
+              Nivel Requerido (1-4)
             </label>
             <input
               type="number"
               min="1"
-              max="10"
+              max="4"
               value={formData.required_skill_level || ''}
               onChange={(e) => handleInputChange('required_skill_level', e.target.value ? parseInt(e.target.value) : null)}
               className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-accent-primary focus:border-transparent bg-bg-main text-text-main font-open-sans"
               placeholder="Opcional"
             />
             {errors.required_skill_level && (
-              <p className="text-error text-sm mt-1 font-open-sans">El nivel debe estar entre 1 y 10</p>
+              <p className="text-error text-sm mt-1 font-open-sans">{errors.required_skill_level}</p>
             )}
           </div>
           {/* Actions */}

@@ -14,7 +14,7 @@ interface MatchCardProps {
     required_skill_level?: string | null
     team1_score?: number | null
     team2_score?: number | null
-    status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled'
+    status: string
     current_participants?: number
     group_name?: string
     creator_name?: string
@@ -40,7 +40,7 @@ export default function MatchCard({
       case 'scheduled': return 'text-accent-primary bg-accent-primary/10 border-accent-primary/20'
       case 'in_progress': return 'text-warning bg-warning/10 border-warning/20'
       case 'completed': return 'text-success bg-success/10 border-success/20'
-      case 'cancelled': return 'text-error bg-error/10 border-error/20'
+      case 'canceled': return 'text-error bg-error/10 border-error/20'
       default: return 'text-text-secondary bg-bg-secondary border-border'
     }
   }
@@ -50,12 +50,12 @@ export default function MatchCard({
       case 'scheduled': return 'Programado'
       case 'in_progress': return 'En Curso'
       case 'completed': return 'Completado'
-      case 'cancelled': return 'Cancelado'
+      case 'canceled': return 'Cancelado'
       default: return 'Desconocido'
     }
   }
 
-  const getUserStatusColor = (status?: string) => {
+  const getUserStatusColor = (status?: string | null) => {
     switch (status) {
       case 'confirmed': return 'text-success bg-success/10 border-success/20'
       case 'pending': return 'text-warning bg-warning/10 border-warning/20'
