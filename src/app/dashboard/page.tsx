@@ -3,10 +3,10 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
 import { useAuth } from '@/contexts/AuthContext'
-import ProfileCompletionBanner from '@/components/dashboard/ProfileCompletionBanner'
+import ProfileCompletionBannerWrapper from '@/components/dashboard/ProfileCompletionBannerWrapper'
 import StatsCard from '@/components/dashboard/StatsCard'
-import CreateMatchModal, { MatchFormData } from '@/components/dashboard/CreateMatchModal'
 import { supabase } from '@/lib/supabase'
+import { getFullName } from '@/lib/utils'
 import Link from 'next/link'
 
 export default function DashboardPage() {
@@ -18,7 +18,6 @@ export default function DashboardPage() {
     winRate: 0
   })
   const [loading, setLoading] = useState(true)
-  const [isCreateMatchModalOpen, setIsCreateMatchModalOpen] = useState(false)
 
   const fetchDashboardStats = useCallback(async () => {
     try {
@@ -105,47 +104,6 @@ export default function DashboardPage() {
     }
   }, [user, fetchDashboardStats])
 
-
-
-  const handleCreateMatch = async (matchData: MatchFormData) => {
-    if (!user?.id) return
-
-    try {
-      const { data: match, error } = await supabase
-        .from('matches')
-        .insert([{
-          ...matchData,
-          creator_id: user.id,
-          scheduled_at: new Date(matchData.scheduled_at).toISOString(),
-          status: 'scheduled'
-        }])
-        .select()
-        .single()
-
-      if (error) throw error
-
-      // Add creator as participant
-      const { error: participantError } = await supabase
-        .from('match_participants')
-        .insert([{
-          match_id: match.id,
-          user_id: user.id,
-          status: 'confirmed',
-          team_number: 1
-        }])
-
-      if (participantError) throw participantError
-
-      // Refresh stats
-      fetchDashboardStats()
-      
-      alert('¡Partido creado exitosamente!')
-    } catch (error) {
-      console.error('Error creating match:', error)
-      throw error
-    }
-  }
-
   return (
     <ProtectedRoute>
       <div className="min-h-screen bg-bg-secondary">
@@ -153,7 +111,7 @@ export default function DashboardPage() {
         <main className="max-w-7xl mx-auto py-4 sm:py-6 sm:px-6 lg:px-8">
           <div className="px-3 sm:px-4 py-4 sm:py-6 sm:px-0">
             {/* Profile Completion Banner */}
-            <ProfileCompletionBanner />
+            <ProfileCompletionBannerWrapper />
 
             {/* Statistics Summary */}
             <div className="bg-bg-main overflow-hidden shadow-lg rounded-lg mb-4 sm:mb-6 border border-border">
@@ -237,7 +195,7 @@ export default function DashboardPage() {
                           Mi Perfil
                         </h3>
                         <p className="text-xs sm:text-sm text-text-secondary font-open-sans">
-                          {profile?.full_name || 'Perfil incompleto'}
+                          {getFullName(profile?.first_name, profile?.last_name) || 'Perfil incompleto'}
                         </p>
                         <p className="text-xs text-text-secondary/80 font-open-sans">
                           Nivel: {profile?.skill_level || 'No definido'}
@@ -305,15 +263,15 @@ export default function DashboardPage() {
                   Acciones Rápidas
                 </h3>
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
-                  <button 
-                    onClick={() => setIsCreateMatchModalOpen(true)}
+                  <Link
+                    href="/dashboard/matches/create"
                     className="flex flex-col items-center justify-center p-3 sm:p-4 bg-accent-primary text-bg-main rounded-lg hover:bg-accent-primary/90 transition-colors"
                   >
                     <svg className="h-5 w-5 sm:h-6 sm:w-6 mb-1 sm:mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                     </svg>
                     <span className="text-xs sm:text-sm font-medium text-center">Crear Partido</span>
-                  </button>
+                  </Link>
 
                   <Link href="/dashboard/players" className="flex flex-col items-center justify-center p-3 sm:p-4 bg-success text-white rounded-lg hover:bg-success/90 transition-colors">
                     <svg className="h-5 w-5 sm:h-6 sm:w-6 mb-1 sm:mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -425,14 +383,6 @@ export default function DashboardPage() {
             </div>
           </div>
         </main>
-
-        {/* Create Match Modal */}
-        <CreateMatchModal
-          isOpen={isCreateMatchModalOpen}
-          onClose={() => setIsCreateMatchModalOpen(false)}
-          onSubmit={handleCreateMatch}
-          userId={user?.id || ''}
-        />
       </div>
     </ProtectedRoute>
   )

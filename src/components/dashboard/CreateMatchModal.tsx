@@ -1,9 +1,19 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
+import { Clock } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import LocationAutocomplete from '@/components/ui/LocationAutocomplete'
+import LocationInfoCard from '@/components/ui/LocationInfoCard'
 import { Location, locationService } from '@/lib/locationService'
+import { SportsLocationResult } from '@/lib/sportsLocationService'
+import { 
+  getUserTimezone, 
+  validateMatchDateTime, 
+  prepareMatchDataForStorage,
+  getCurrentDateTimeInTimezone,
+  getTimezoneName 
+} from '@/lib/utils/timezoneUtils'
 
 interface CreateMatchModalProps {
   isOpen: boolean
@@ -14,17 +24,20 @@ interface CreateMatchModalProps {
 
 export interface MatchFormData {
   group_id: string
-  scheduled_at: string
+  date: string
+  time: string
   location_name: string
   latitude?: number | null
   longitude?: number | null
+  sports_location_id?: string | null
   is_public: boolean
   required_skill_level?: number | null
 }
 
 interface MatchFormErrors {
   group_id?: string
-  scheduled_at?: string
+  date?: string
+  time?: string
   location_name?: string
   required_skill_level?: string
 }
@@ -34,6 +47,13 @@ interface Group {
   name: string
   city?: string | null
   country_code?: string | null
+  postal_code?: string | null
+  place_name?: string | null
+  admin_name1?: string | null
+  admin_name2?: string | null
+  admin_name3?: string | null
+  latitude?: number | null
+  longitude?: number | null
 }
 
 interface GroupMemberWithGroups {
@@ -41,33 +61,48 @@ interface GroupMemberWithGroups {
 }
 
 export default function CreateMatchModal({ isOpen, onClose, onSubmit, userId }: CreateMatchModalProps) {
+  // Get user timezone and initialize form with current date/time
+  const userTimezone = getUserTimezone()
+  const currentDateTime = getCurrentDateTimeInTimezone(userTimezone)
+  
   const [formData, setFormData] = useState<MatchFormData>({
     group_id: '',
-    scheduled_at: '',
+    date: currentDateTime.date,
+    time: currentDateTime.time,
     location_name: '',
     latitude: null,
     longitude: null,
+    sports_location_id: null,
     is_public: true,
     required_skill_level: null
   })
   const [userGroups, setUserGroups] = useState<Group[]>([])
   const [selectedGroupCountry, setSelectedGroupCountry] = useState<string>('')
+  const [selectedGroupPostalCode, setSelectedGroupPostalCode] = useState<string>('')
+  const [selectedLocation, setSelectedLocation] = useState<SportsLocationResult | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errors, setErrors] = useState<MatchFormErrors>({})
 
   const fetchUserGroups = useCallback(async () => {
     try {
       const { data, error } = await supabase
-        .from('group_members')
-        .select(`
-          groups (
-            id,
-            name,
-            city,
-            country_code
-          )
-        `)
-        .eq('user_id', userId)
+          .from('group_members')
+          .select(`
+            groups (
+              id,
+              name,
+              city,
+              country_code,
+              postal_code,
+              place_name,
+              admin_name1,
+              admin_name2,
+              admin_name3,
+              latitude,
+              longitude
+            )
+          `)
+          .eq('user_id', userId)
 
       if (error) throw error
 
@@ -87,57 +122,80 @@ export default function CreateMatchModal({ isOpen, onClose, onSubmit, userId }: 
     }
   }, [isOpen, userId, fetchUserGroups])
 
-  // Efecto para obtener el país del grupo seleccionado
+  // Efecto para obtener el país y código postal del grupo seleccionado
   useEffect(() => {
-    const getGroupCountry = async () => {
+    const getGroupInfo = async () => {
       if (!formData.group_id) {
         setSelectedGroupCountry('')
+        setSelectedGroupPostalCode('')
         return
       }
 
       const selectedGroup = userGroups.find(group => group.id === formData.group_id)
-      if (selectedGroup?.country_code) {
-        setSelectedGroupCountry(selectedGroup.country_code)
-      } else if (selectedGroup?.city) {
-        // Fallback: obtener país por ciudad si no hay country_code
-        try {
-          const countryCode = await locationService.getCountryCodeByCity(selectedGroup.city)
-          setSelectedGroupCountry(countryCode || '')
-        } catch (error) {
-          console.error('Error obteniendo país del grupo:', error)
+      if (selectedGroup) {
+        // Establecer país
+        if (selectedGroup.country_code) {
+          setSelectedGroupCountry(selectedGroup.country_code)
+        } else if (selectedGroup.city) {
+          // Fallback: obtener país por ciudad si no hay country_code
+          try {
+            const countryCode = await locationService.getCountryCodeByCity(selectedGroup.city)
+            setSelectedGroupCountry(countryCode || '')
+          } catch (error) {
+            console.error('Error obteniendo país del grupo:', error)
+            setSelectedGroupCountry('')
+          }
+        } else {
           setSelectedGroupCountry('')
+        }
+
+        // Establecer código postal
+        setSelectedGroupPostalCode(selectedGroup.postal_code || '')
+
+        // NUEVA FUNCIONALIDAD: Cargar automáticamente la ubicación del grupo
+        if (selectedGroup.city) {
+          // Usar city (comunidad autónoma) para búsquedas más específicas en Google Places API
+          const communityLocation = selectedGroup.city // ej: "Comunidad Valenciana"
+          
+          // Construir ubicación usando la comunidad autónoma para mejor filtrado en las búsquedas
+          let searchLocation = communityLocation
+          
+          if (selectedGroup.country_code) {
+            // Agregar país para mayor especificidad en las búsquedas
+            searchLocation = `${communityLocation}, ${selectedGroup.country_code === 'ES' ? 'España' : selectedGroup.country_code}`
+          }
+
+          // NO actualizar automáticamente el campo de búsqueda - dejar que el usuario busque manualmente
+          // El campo informativo ya muestra la comunidad autónoma del grupo
         }
       } else {
         setSelectedGroupCountry('')
+        setSelectedGroupPostalCode('')
       }
     }
 
-    getGroupCountry()
+    getGroupInfo()
   }, [formData.group_id, userGroups])
 
   const validateForm = (): boolean => {
     const newErrors: MatchFormErrors = {}
-    
+
     if (!formData.group_id) {
-      newErrors.group_id = 'Debes seleccionar un grupo'
-    }
-    
-    if (!formData.scheduled_at) {
-      newErrors.scheduled_at = 'La fecha y hora son requeridas'
-    } else {
-      const selectedDate = new Date(formData.scheduled_at)
-      const now = new Date()
-      if (selectedDate <= now) {
-        newErrors.scheduled_at = 'La fecha debe ser futura'
-      }
-    }
-    
-    if (!formData.location_name.trim()) {
-      newErrors.location_name = 'La ubicación es requerida'
+      newErrors.group_id = 'Selecciona un grupo'
     }
 
-    if (formData.required_skill_level !== null && formData.required_skill_level !== undefined && (formData.required_skill_level < 1 || formData.required_skill_level > 4)) {
-      newErrors.required_skill_level = 'El nivel debe estar entre 1 y 4'
+    // Validate date and time using timezone utilities
+    const dateTimeValidation = validateMatchDateTime(formData.date, formData.time, userTimezone)
+    if (!dateTimeValidation.isValid) {
+      if (dateTimeValidation.error?.includes('fecha')) {
+        newErrors.date = dateTimeValidation.error
+      } else {
+        newErrors.time = dateTimeValidation.error
+      }
+    }
+
+    if (!formData.location_name.trim()) {
+      newErrors.location_name = 'Ingresa una ubicación'
     }
 
     setErrors(newErrors)
@@ -148,20 +206,44 @@ export default function CreateMatchModal({ isOpen, onClose, onSubmit, userId }: 
     e.preventDefault()
     
     if (!validateForm()) return
-    
+
     setIsSubmitting(true)
     try {
-      await onSubmit(formData)
+      // Prepare match data with timezone conversion
+      const matchDataForStorage = prepareMatchDataForStorage(
+        formData.date,
+        formData.time,
+        userTimezone
+      )
+
+      const submitData = {
+        group_id: formData.group_id,
+        scheduled_at: matchDataForStorage.scheduled_at,
+        timezone: matchDataForStorage.timezone,
+        location_name: formData.location_name.trim(),
+        latitude: formData.latitude,
+        longitude: formData.longitude,
+        sports_location_id: formData.sports_location_id,
+        is_public: formData.is_public,
+        required_skill_level: formData.required_skill_level
+      }
+
+      await onSubmit(submitData)
+      
       // Reset form
+      const newCurrentDateTime = getCurrentDateTimeInTimezone(userTimezone)
       setFormData({
         group_id: '',
-        scheduled_at: '',
+        date: newCurrentDateTime.date,
+        time: newCurrentDateTime.time,
         location_name: '',
         latitude: null,
         longitude: null,
+        sports_location_id: null,
         is_public: true,
         required_skill_level: null
       })
+      setSelectedLocation(null)
       setErrors({})
       onClose()
     } catch (error) {
@@ -171,14 +253,16 @@ export default function CreateMatchModal({ isOpen, onClose, onSubmit, userId }: 
     }
   }
 
-  const handleLocationSelect = (location: Location | null) => {
+  const handleLocationSelect = (location: SportsLocationResult | null) => {
     if (location) {
       setFormData(prev => ({
         ...prev,
-        location_name: location.display_name,
+        location_name: location.name,
         latitude: location.latitude || null,
-        longitude: location.longitude || null
+        longitude: location.longitude || null,
+        sports_location_id: location.source === 'local' ? location.id : null
       }))
+      setSelectedLocation(location)
       // Clear location error if it exists
       if (errors.location_name) {
         setErrors(prev => ({ ...prev, location_name: undefined }))
@@ -188,8 +272,10 @@ export default function CreateMatchModal({ isOpen, onClose, onSubmit, userId }: 
         ...prev,
         location_name: '',
         latitude: null,
-        longitude: null
+        longitude: null,
+        sports_location_id: null
       }))
+      setSelectedLocation(null)
     }
   }
 
@@ -229,6 +315,14 @@ export default function CreateMatchModal({ isOpen, onClose, onSubmit, userId }: 
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          {/* Timezone info header */}
+          <div className="bg-accent-primary/5 border border-accent-primary/20 rounded-lg p-3 mb-4">
+            <div className="flex items-center text-sm text-text-main font-open-sans">
+              <Clock className="h-4 w-4 mr-2 text-accent-primary" />
+              <span>Zona horaria: {getTimezoneName(userTimezone)}</span>
+            </div>
+          </div>
+
           {/* Group */}
           <div>
             <label className="block text-sm font-medium text-text-main font-open-sans mb-2">
@@ -249,73 +343,165 @@ export default function CreateMatchModal({ isOpen, onClose, onSubmit, userId }: 
             {errors.group_id && (
               <p className="text-error text-sm mt-1 font-open-sans">{errors.group_id}</p>
             )}
-            {userGroups.length === 0 && (
-              <p className="text-warning text-sm mt-1 font-open-sans">
-                Únete a un grupo para poder crear partidos
-              </p>
-            )}
           </div>
 
           {/* Date and Time */}
-          <div>
-            <label className="block text-sm font-medium text-text-main font-open-sans mb-2">
-              Fecha y Hora *
-            </label>
-            <input
-              type="datetime-local"
-              value={formData.scheduled_at}
-              onChange={(e) => handleInputChange('scheduled_at', e.target.value)}
-              min={getMinDate()}
-              className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-accent-primary focus:border-transparent bg-bg-main text-text-main font-open-sans"
-            />
-            {errors.scheduled_at && (
-              <p className="text-error text-sm mt-1 font-open-sans">{errors.scheduled_at}</p>
-            )}
+          <div className="grid grid-cols-2 gap-4">
+            {/* Date */}
+            <div>
+              <label className="block text-sm font-medium text-text-main font-open-sans mb-2">
+                Fecha *
+              </label>
+              <input
+                type="date"
+                value={formData.date}
+                onChange={(e) => setFormData(prev => ({ ...prev, date: e.target.value }))}
+                className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-accent-primary focus:border-transparent bg-bg-main text-text-main font-open-sans"
+              />
+              {errors.date && (
+                <p className="text-error text-sm mt-1 font-open-sans">{errors.date}</p>
+              )}
+            </div>
+
+            {/* Time */}
+            <div>
+              <label className="block text-sm font-medium text-text-main font-open-sans mb-2">
+                Hora *
+              </label>
+              <input
+                type="time"
+                value={formData.time}
+                onChange={(e) => setFormData(prev => ({ ...prev, time: e.target.value }))}
+                className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-accent-primary focus:border-transparent bg-bg-main text-text-main font-open-sans"
+              />
+              {errors.time && (
+                <p className="text-error text-sm mt-1 font-open-sans">{errors.time}</p>
+              )}
+            </div>
           </div>
 
-          {/* Location */}
+          {/* Location Search */}
           <div>
             <label className="block text-sm font-medium text-text-main font-open-sans mb-2">
-              Ubicación *
+              Ubicación del Club/Pista *
             </label>
+            
+            {/* Información del grupo seleccionado */}
+            {formData.group_id ? (
+              <div className="mb-3 p-3 bg-accent-primary/5 border border-accent-primary/20 rounded-lg">
+                <div className="flex items-center text-sm text-text-main font-open-sans">
+                  <svg className="h-4 w-4 mr-2 text-accent-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  <span className="font-medium">Búsqueda en: </span>
+                  <span className="ml-1">
+                    {(() => {
+                       const selectedGroup = userGroups.find(g => g.id === formData.group_id)
+                       if (selectedGroup) {
+                         // Mostrar la localidad real del grupo (place_name → admin_name3 → city)
+                         const locality = selectedGroup.place_name || selectedGroup.admin_name3 || selectedGroup.city
+                         const country = selectedGroup.country_code === 'ES' ? 'España' : selectedGroup.country_code
+                         return locality ? `${locality}, ${country}` : 'Información no disponible'
+                       }
+                       return 'Información no disponible'
+                     })()}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div className="mb-3 p-3 bg-warning/10 border border-warning/30 rounded-lg">
+                <div className="flex items-center text-sm text-warning font-open-sans">
+                  <svg className="h-4 w-4 mr-2 text-warning" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16c-.77.833.192 2.5 1.732 2.5z" />
+                  </svg>
+                  <span>Selecciona un grupo primero para habilitar la búsqueda de ubicación</span>
+                </div>
+              </div>
+            )}
+
             <LocationAutocomplete
               value={formData.location_name}
               onChange={handleLocationSelect}
-              placeholder="Buscar ubicación del partido..."
+              placeholder={formData.group_id ? "Buscar club, centro deportivo o dirección..." : "Selecciona un grupo primero"}
               className="w-full"
               showCountryFlags={true}
               countryFilter={selectedGroupCountry || undefined}
+              groupLocationInfo={(() => {
+                if (!selectedGroup) return undefined
+                return {
+                  city: selectedGroup.place_name || selectedGroup.admin_name3 || undefined,
+                  region: selectedGroup.admin_name2 || selectedGroup.admin_name1 || undefined,
+                  coordinates: selectedGroup.latitude && selectedGroup.longitude
+                    ? { lat: selectedGroup.latitude, lng: selectedGroup.longitude }
+                    : undefined
+                }
+              })()}
+              disabled={!formData.group_id}
             />
             {errors.location_name && (
               <p className="text-error text-sm mt-1 font-open-sans">{errors.location_name}</p>
+            )}
+
+            {/* Mostrar información detallada de la ubicación seleccionada */}
+            {selectedLocation && (
+              <div className="mt-3">
+                <LocationInfoCard
+                  location={selectedLocation}
+                  onClose={() => setSelectedLocation(null)}
+                  showMap={true}
+                />
+              </div>
             )}
           </div>
 
           {/* Public/Private */}
           <div>
-            <label className="block text-sm font-medium text-text-main font-open-sans mb-2">
+            <label className="block text-sm font-medium text-text-main font-open-sans mb-3">
               Visibilidad
             </label>
-            <div className="flex space-x-4">
-              <label className="flex items-center">
-                <input
-                  type="radio"
-                  name="is_public"
-                  checked={formData.is_public}
-                  onChange={() => handleInputChange('is_public', true)}
-                  className="mr-2"
-                />
-                <span className="text-text-main font-open-sans">Público</span>
+            <div className="flex space-x-6">
+              <label className="flex items-center cursor-pointer">
+                <div className="relative">
+                  <input
+                    type="radio"
+                    name="is_public"
+                    checked={formData.is_public}
+                    onChange={() => handleInputChange('is_public', true)}
+                    className="sr-only"
+                  />
+                  <div className={`w-5 h-5 rounded-full border-2 transition-all duration-200 ${
+                    formData.is_public 
+                      ? 'border-accent-primary bg-accent-primary' 
+                      : 'border-border bg-bg-main hover:border-accent-primary/50'
+                  }`}>
+                    {formData.is_public && (
+                      <div className="w-2 h-2 bg-bg-main rounded-full absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2"></div>
+                    )}
+                  </div>
+                </div>
+                <span className="ml-3 text-text-main font-open-sans">Público</span>
               </label>
-              <label className="flex items-center">
-                <input
-                  type="radio"
-                  name="is_public"
-                  checked={!formData.is_public}
-                  onChange={() => handleInputChange('is_public', false)}
-                  className="mr-2"
-                />
-                <span className="text-text-main font-open-sans">Privado</span>
+              <label className="flex items-center cursor-pointer">
+                <div className="relative">
+                  <input
+                    type="radio"
+                    name="is_public"
+                    checked={!formData.is_public}
+                    onChange={() => handleInputChange('is_public', false)}
+                    className="sr-only"
+                  />
+                  <div className={`w-5 h-5 rounded-full border-2 transition-all duration-200 ${
+                    !formData.is_public 
+                      ? 'border-accent-primary bg-accent-primary' 
+                      : 'border-border bg-bg-main hover:border-accent-primary/50'
+                  }`}>
+                    {!formData.is_public && (
+                      <div className="w-2 h-2 bg-bg-main rounded-full absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2"></div>
+                    )}
+                  </div>
+                </div>
+                <span className="ml-3 text-text-main font-open-sans">Privado</span>
               </label>
             </div>
           </div>

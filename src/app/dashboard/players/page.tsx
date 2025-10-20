@@ -6,6 +6,7 @@ import ProtectedRoute from '@/components/auth/ProtectedRoute'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
 import { Tables } from '@/lib/types/supabase'
+import { getFullName } from '@/lib/utils'
 
 type Player = Tables<'profiles'>
 
@@ -47,7 +48,7 @@ export default function PlayersPage() {
       // Apply search filter
       if (searchQuery.trim()) {
         const search = searchQuery.trim();
-        query = query.or(`username.ilike.%${search}%,full_name.ilike.%${search}%`);
+        query = query.or(`username.ilike.%${search}%,first_name.ilike.%${search}%,last_name.ilike.%${search}%`);
       }
 
       // Apply skill level filter
@@ -223,7 +224,7 @@ export default function PlayersPage() {
                     </div>
                     <div className="ml-4 flex-1">
                       <h3 className="text-lg font-semibold text-text-main font-montserrat">
-                        {player.full_name || player.username}
+                        {getFullName(player.first_name, player.last_name) || player.username}
                       </h3>
                       <p className="text-sm text-text-secondary font-open-sans">
                         @{player.username}

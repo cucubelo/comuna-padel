@@ -162,7 +162,7 @@ export default function LoginForm({ onToggleMode, redirectTo = '/dashboard' }: L
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-accent-primary text-white py-4 px-4 rounded-xl hover:bg-accent-primary/90 focus:outline-none focus:ring-2 focus:ring-accent-primary focus:ring-offset-2 focus:ring-offset-white disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-semibold font-open-sans text-base shadow-lg touch-none"
+            className="w-full bg-accent-primary text-black py-4 px-4 rounded-xl hover:bg-accent-primary/90 focus:outline-none focus:ring-2 focus:ring-accent-primary focus:ring-offset-2 focus:ring-offset-white disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-semibold font-open-sans text-base shadow-lg touch-none"
           >
             {loading ? (
               <div className="flex items-center justify-center">

@@ -8,7 +8,7 @@ import { supabase } from "@/lib/supabase";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Tables } from "@/lib/types/supabase";
 
-type GroupType = Tables<'groups'>['Row']['group_type'];
+type GroupType = Tables<'groups'>['group_type'];
 
 interface Group {
   id: string;
@@ -23,6 +23,7 @@ interface Group {
   group_type: GroupType;
   creator_name?: string;
   user_role?: "admin" | "member";
+  slug?: string;
 }
 
 interface GroupWithProfile {
@@ -35,9 +36,11 @@ interface GroupWithProfile {
   postal_code?: string;
   place_name?: string;
   group_type: GroupType;
+  slug?: string;
   profiles:
     | {
-        full_name: string;
+        first_name: string;
+        last_name: string;
       }[]
     | null;
 }
@@ -54,11 +57,8 @@ interface GroupMemberWithGroup {
     postal_code?: string;
     place_name?: string;
     group_type: GroupType;
-    profiles:
-      | {
-          full_name: string;
-        }[]
-      | null;
+    creator_id?: string;
+    slug?: string;
   };
 }
 
@@ -110,9 +110,8 @@ export default function GroupsPage() {
             postal_code,
             place_name,
             group_type,
-            profiles!groups_creator_id_fkey (
-              full_name
-            )
+            creator_id,
+            slug
           )
         `
         )
@@ -172,8 +171,9 @@ export default function GroupsPage() {
             postal_code: group.postal_code || undefined,
             place_name: group.place_name || undefined,
             group_type: group.group_type || "private",
-            creator_name: group.profiles?.[0]?.full_name || undefined,
+            creator_name: undefined, // Temporalmente removido hasta que se arregle la consulta
             user_role: item.role,
+            slug: group.slug || undefined,
           };
         })
         .filter(Boolean) as Group[];
@@ -207,9 +207,11 @@ export default function GroupsPage() {
           postal_code,
           place_name,
           group_type,
+          slug,
           profiles!groups_creator_id_fkey (
-            full_name
-          )
+        first_name,
+        last_name
+      )
         `);
 
       if (excludeIds.length > 0) {
@@ -283,7 +285,10 @@ export default function GroupsPage() {
           postal_code: group.postal_code || undefined,
           place_name: group.place_name || undefined,
           group_type: group.group_type || "private",
-          creator_name: group.profiles?.[0]?.full_name || undefined,
+          slug: group.slug || undefined,
+          creator_name: group.profiles?.[0] 
+          ? [group.profiles[0].first_name, group.profiles[0].last_name].filter(Boolean).join(' ') || undefined
+          : undefined,
         })) || [];
 
       setRecommendedGroups(groups);

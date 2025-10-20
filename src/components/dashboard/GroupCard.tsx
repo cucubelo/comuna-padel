@@ -8,6 +8,8 @@ import {
   hasUserPendingRequest,
 } from "@/lib/group-access-requests";
 import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/contexts/ToastContext";
+import { generateSlug } from "@/lib/utils/slug";
 
 interface GroupCardProps {
   group: {
@@ -23,6 +25,7 @@ interface GroupCardProps {
     group_type: string;
     creator_name?: string;
     user_role?: "admin" | "member";
+    slug?: string; // Campo slug opcional para compatibilidad
   };
   onJoin?: (groupId: string) => void;
   onLeave?: (groupId: string) => void;
@@ -38,6 +41,7 @@ export default function GroupCard({
 }: GroupCardProps) {
   const router = useRouter();
   const { user } = useAuth();
+  const { showSuccess, showError } = useToast();
   const [isRequestingAccess, setIsRequestingAccess] = useState(false);
   const [hasPendingRequest, setHasPendingRequest] = useState(false);
 
@@ -66,14 +70,14 @@ export default function GroupCard({
       const { error } = await createAccessRequest({ groupId: group.id, userId: user.id });
 
       if (error) {
-        alert(`Error: ${error}`);
+        showError(`Error: ${error}`);
       } else {
-        alert("Solicitud de acceso enviada correctamente");
+        showSuccess("Solicitud de acceso enviada correctamente");
         setHasPendingRequest(true);
       }
     } catch (err) {
       console.error("Error al enviar la solicitud:", err);
-      alert("Error al enviar la solicitud");
+      showError("Error al enviar la solicitud");
     } finally {
       setIsRequestingAccess(false);
     }
@@ -217,7 +221,7 @@ export default function GroupCard({
         {/* Action Buttons */}
         <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
           <Link
-            href={`/dashboard/groups/${group.id}`}
+            href={`/dashboard/groups/${group.slug || generateSlug(group.name, group.id)}`}
             className="flex-1 bg-accent-primary/10 text-accent-primary px-4 py-2.5 sm:py-3 rounded-lg font-medium font-open-sans transition-colors text-center border border-accent-primary/20 hover:border-accent-primary/40 text-sm sm:text-base cursor-pointer"
           >
             Ver detalles

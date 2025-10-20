@@ -74,6 +74,39 @@ class LocationService {
   }
 
   /**
+   * Genera códigos postales vecinos basados en un código postal base
+   * Por ejemplo: 46800 -> [46799, 46800, 46801, 46802, 46798]
+   */
+  private generateNeighborPostalCodes(basePostalCode: string, radius: number = 2): string[] {
+    const postalCodes: string[] = [basePostalCode];
+    
+    // Extraer la parte numérica del código postal
+    const numericPart = basePostalCode.match(/\d+/);
+    if (!numericPart) return [basePostalCode];
+    
+    const baseNumber = parseInt(numericPart[0]);
+    const prefix = basePostalCode.substring(0, basePostalCode.indexOf(numericPart[0]));
+    const suffix = basePostalCode.substring(basePostalCode.indexOf(numericPart[0]) + numericPart[0].length);
+    
+    // Generar códigos vecinos
+    for (let i = 1; i <= radius; i++) {
+      // Códigos menores
+      const lowerCode = baseNumber - i;
+      if (lowerCode >= 0) {
+        const paddedLower = lowerCode.toString().padStart(numericPart[0].length, '0');
+        postalCodes.push(prefix + paddedLower + suffix);
+      }
+      
+      // Códigos mayores
+      const upperCode = baseNumber + i;
+      const paddedUpper = upperCode.toString().padStart(numericPart[0].length, '0');
+      postalCodes.push(prefix + paddedUpper + suffix);
+    }
+    
+    return postalCodes;
+  }
+
+  /**
    * Buscar ubicaciones locales en la base de datos
    */
   private async searchLocal(
@@ -165,29 +198,169 @@ class LocationService {
   /**
    * Buscar ubicaciones en OpenStreetMap Nominatim
    */
+  /**
+   * Buscar ubicaciones usando la API de Nominatim con soporte para códigos postales múltiples
+   */
   public async searchNominatim(
     query: string,
-    countryCode?: string
+    countryCode?: string,
+    searchType: 'administrative' | 'places' | 'all' = 'all',
+    postalCodes?: string[]
   ): Promise<Location[]> {
-    console.log("🌐 Iniciando búsqueda en Nominatim API:", {
+    console.log(`🔍 Iniciando búsqueda Nominatim:`, {
       query,
       countryCode,
+      searchType,
+      postalCodes: postalCodes?.length || 0
     });
 
-    try {
-      // Configurar URL para buscar SOLO localidades administrativas (ciudades, pueblos, islas, provincias)
-      // Excluimos calles, edificios, puntos de interés específicos
-      let url = `https://nominatim.openstreetmap.org/search?format=json&limit=8&q=${encodeURIComponent(
-        query
-      )}&addressdetails=1`;
+    if (postalCodes && postalCodes.length > 0) {
+      console.log(`📮 Búsqueda con códigos postales: ${postalCodes.join(', ')}`);
       
-      if (countryCode) {
-        url += `&countrycodes=${countryCode.toLowerCase()}`;
+      // Búsqueda con códigos postales específicos
+      const allResults: Location[] = [];
+      
+      for (const postalCode of postalCodes) {
+        console.log(`🔍 Buscando en código postal: ${postalCode}`);
+        try {
+          const results = await this.searchNominatimByPostalCode(
+            query,
+            postalCode,
+            countryCode,
+            searchType
+          );
+          console.log(`✅ Encontrados ${results.length} resultados para CP ${postalCode}`);
+          allResults.push(...results);
+        } catch (error) {
+          console.error(`❌ Error buscando en CP ${postalCode}:`, error);
+        }
+      }
+      
+      const uniqueResults = this.removeDuplicateLocations(allResults);
+      console.log(`🎯 Total de resultados únicos: ${uniqueResults.length}`);
+      return uniqueResults;
+    } else {
+      console.log(`🌍 Búsqueda estándar sin códigos postales`);
+      const results = await this.searchNominatimStandard(query, countryCode, searchType);
+      console.log(`✅ Encontrados ${results.length} resultados en búsqueda estándar`);
+      return results;
+    }
+  }
+
+  /**
+   * Búsqueda específica por código postal
+   */
+  private async searchNominatimByPostalCode(
+    query: string,
+    postalCode: string,
+    countryCode?: string,
+    searchType: 'administrative' | 'places' | 'all' = 'all'
+  ): Promise<Location[]> {
+    // Usar búsqueda estructurada de Nominatim para códigos postales
+    let url = `https://nominatim.openstreetmap.org/search?format=json&limit=8&addressdetails=1&extratags=1`;
+    
+    // Usar múltiples enfoques para búsqueda estructurada
+    const results: Location[] = [];
+    
+    // Enfoque 1: Buscar como amenity (instalaciones deportivas)
+    const amenityUrl = `${url}&amenity=${encodeURIComponent(query)}&postalcode=${encodeURIComponent(postalCode)}${countryCode ? `&countrycodes=${countryCode.toLowerCase()}` : ''}`;
+    
+    // Enfoque 2: Buscar como street/lugar específico
+    const streetUrl = `${url}&street=${encodeURIComponent(query)}&postalcode=${encodeURIComponent(postalCode)}${countryCode ? `&countrycodes=${countryCode.toLowerCase()}` : ''}`;
+    
+    // Enfoque 3: Búsqueda general con código postal en la query
+    const generalUrl = `https://nominatim.openstreetmap.org/search?format=json&limit=8&addressdetails=1&extratags=1&q=${encodeURIComponent(`${query} ${postalCode}`)}${countryCode ? `&countrycodes=${countryCode.toLowerCase()}` : ''}`;
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+    try {
+      // Ejecutar las tres búsquedas en paralelo
+      const [amenityResponse, streetResponse, generalResponse] = await Promise.all([
+        fetch(amenityUrl, {
+          signal: controller.signal,
+          headers: { "User-Agent": "Comuna Padel Location Search" },
+        }),
+        fetch(streetUrl, {
+          signal: controller.signal,
+          headers: { "User-Agent": "Comuna Padel Location Search" },
+        }),
+        fetch(generalUrl, {
+          signal: controller.signal,
+          headers: { "User-Agent": "Comuna Padel Location Search" },
+        })
+      ]);
+
+      clearTimeout(timeoutId);
+
+      // Procesar resultados de amenity
+      if (amenityResponse.ok) {
+        const amenityData: NominatimResult[] = await amenityResponse.json();
+        if (Array.isArray(amenityData)) {
+          results.push(...amenityData.map(result => this.mapNominatimToLocation(result)));
+        }
       }
 
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000);
+      // Procesar resultados de street
+      if (streetResponse.ok) {
+        const streetData: NominatimResult[] = await streetResponse.json();
+        if (Array.isArray(streetData)) {
+          results.push(...streetData.map(result => this.mapNominatimToLocation(result)));
+        }
+      }
 
+      // Procesar resultados generales
+      if (generalResponse.ok) {
+        const generalData: NominatimResult[] = await generalResponse.json();
+        if (Array.isArray(generalData)) {
+          results.push(...generalData.map(result => this.mapNominatimToLocation(result)));
+        }
+      }
+
+    } catch (error) {
+      console.error('❌ Error en búsqueda por código postal:', error);
+      clearTimeout(timeoutId);
+      return [];
+    }
+
+    // Mapear y filtrar resultados según el tipo de búsqueda
+    let locations = this.removeDuplicateLocations(results);
+
+    if (searchType === 'places') {
+      locations = locations.filter(location => this.isSpecificPlace(location));
+    } else if (searchType === 'administrative') {
+      locations = locations.filter(location => this.isAppropriateAdministrativeLevel(location));
+    }
+
+    return locations;
+  }
+
+  /**
+   * Búsqueda estándar sin códigos postales específicos
+   */
+  private async searchNominatimStandard(
+    query: string,
+    countryCode?: string,
+    searchType: 'administrative' | 'places' | 'all' = 'all'
+  ): Promise<Location[]> {
+    // Configurar URL base con parámetros optimizados
+    let url = `https://nominatim.openstreetmap.org/search?format=json&limit=12&addressdetails=1&extratags=1`;
+    
+    // Usar parámetro 'q' para búsqueda general
+    url += `&q=${encodeURIComponent(query)}`;
+    
+    if (countryCode) {
+      url += `&countrycodes=${countryCode.toLowerCase()}`;
+    }
+
+    // Agregar parámetros adicionales para mejorar la precisión
+    url += `&dedupe=1`; // Eliminar duplicados automáticamente
+    url += `&polygon_geojson=0`; // No necesitamos geometría compleja
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+    try {
       const response = await fetch(url, {
         signal: controller.signal,
         headers: {
@@ -209,23 +382,38 @@ class LocationService {
         return [];
       }
 
-      // Mapear y filtrar solo por países soportados Y nivel administrativo apropiado
-      const locations = data
-        .map(this.mapNominatimToLocation)
-        .filter((location) => {
+      // Mapear y filtrar resultados según el tipo de búsqueda
+      let locations = data.map((result) => this.mapNominatimToLocation(result));
+
+      if (searchType === 'administrative') {
+        // Solo localidades administrativas (ciudades, pueblos, provincias)
+        locations = locations.filter((location) => {
           const isSupported = this.supportedCountries.includes(location.country_code.toUpperCase());
           const isAppropriateLevel = this.isAppropriateAdministrativeLevel(location);
           return isSupported && isAppropriateLevel;
         });
-
-      return locations;
-    } catch (error) {
-      if (error instanceof Error && error.name === "AbortError") {
-        console.warn("Nominatim API request aborted due to timeout");
-        return [];
+      } else if (searchType === 'places') {
+        // Solo lugares específicos (clubes, centros deportivos, direcciones exactas)
+        locations = locations.filter((location) => {
+          const isSupported = this.supportedCountries.includes(location.country_code.toUpperCase());
+          const isSpecificPlace = this.isSpecificPlace(location);
+          return isSupported && isSpecificPlace;
+        });
+      } else {
+        // Búsqueda mixta: tanto administrativas como lugares específicos
+        locations = locations.filter((location) => {
+          const isSupported = this.supportedCountries.includes(location.country_code.toUpperCase());
+          const isAppropriateLevel = this.isAppropriateAdministrativeLevel(location);
+          const isSpecificPlace = this.isSpecificPlace(location);
+          return isSupported && (isAppropriateLevel || isSpecificPlace);
+        });
       }
 
-      console.error("Error searching Nominatim:", error);
+      return locations;
+
+    } catch (error) {
+      console.error('❌ Error en búsqueda estándar:', error);
+      clearTimeout(timeoutId);
       return [];
     }
   }
@@ -235,6 +423,36 @@ class LocationService {
    * Solo queremos: ciudades, pueblos, islas, provincias, comunidades autónomas
    * NO queremos: calles, edificios, restaurantes, tiendas
    */
+  private isSpecificPlace(location: Location): boolean {
+    // Verificar si es un lugar específico (club, centro deportivo, dirección exacta)
+    const { class: locationClass, type: locationType } = location;
+    
+    // Lugares deportivos y de ocio
+    if (locationClass === 'amenity') {
+      return ['sports_centre', 'leisure_centre', 'fitness_centre', 'swimming_pool', 'tennis', 'football'].includes(locationType || '');
+    }
+    
+    if (locationClass === 'leisure') {
+      return ['sports_centre', 'fitness_centre', 'pitch', 'track', 'stadium'].includes(locationType || '');
+    }
+    
+    if (locationClass === 'sport') {
+      return ['tennis', 'football', 'basketball', 'volleyball', 'padel', 'squash'].includes(locationType || '');
+    }
+    
+    // Direcciones exactas (calles con número)
+    if (locationClass === 'highway' && locationType === 'residential') {
+      return true;
+    }
+    
+    // Edificios específicos
+    if (locationClass === 'building') {
+      return ['sports_hall', 'stadium', 'pavilion'].includes(locationType || '');
+    }
+    
+    return false;
+  }
+
   private isAppropriateAdministrativeLevel(location: Location): boolean {
     const type = location.type;
     const displayName = location.display_name.toLowerCase();
@@ -331,12 +549,21 @@ class LocationService {
    */
  public async searchLocations(
     query: string,
-    countryCode?: string
+    countryCode?: string,
+    searchType: 'administrative' | 'places' | 'all' = 'all',
+    postalCode?: string
   ): Promise<Location[]> {
     const trimmedQuery = query.trim();
     if (!trimmedQuery) return [];
 
     console.log("🔍 Iniciando búsqueda híbrida para:", trimmedQuery);
+
+    // Generar códigos postales vecinos si se proporciona un código postal
+    let postalCodes: string[] | undefined;
+    if (postalCode) {
+      postalCodes = this.generateNeighborPostalCodes(postalCode);
+      console.log("📮 Códigos postales generados:", postalCodes);
+    }
 
     // Buscar en ubicaciones locales primero
     const localResults = await this.searchLocal(trimmedQuery, countryCode);
@@ -345,19 +572,19 @@ class LocationService {
     let nominatimResults: Location[] = [];
     const hasGoodMatch = this.hasGoodLocalMatch(trimmedQuery, localResults);
 
-    if (!hasGoodMatch) {
+    if (!hasGoodMatch || postalCode) {
       nominatimResults = await this.searchNominatim(
         trimmedQuery,
-        countryCode
+        countryCode,
+        searchType,
+        postalCodes
       );
     }
 
     const combinedResults = [...localResults, ...nominatimResults];
 
     // Eliminar duplicados, dando prioridad a los resultados locales
-    const uniqueResults = Array.from(
-      new Map(combinedResults.map((loc) => [loc.display_name, loc])).values()
-    );
+    const uniqueResults = this.removeDuplicateLocations(combinedResults);
 
     return uniqueResults;
   }
@@ -504,6 +731,33 @@ class LocationService {
         flag: info?.flag || "🌍",
       };
     }).filter((country) => country.name !== country.code);
+  }
+
+  /**
+   * Elimina ubicaciones duplicadas basándose en coordenadas similares
+   */
+  private removeDuplicateLocations(locations: Location[]): Location[] {
+    const uniqueLocations: Location[] = [];
+    const tolerance = 0.001; // Tolerancia para considerar coordenadas similares (~100m)
+
+    for (const location of locations) {
+      const isDuplicate = uniqueLocations.some(existing => {
+        if (!location.latitude || !location.longitude || !existing.latitude || !existing.longitude) {
+          return false;
+        }
+        
+        const latDiff = Math.abs(location.latitude - existing.latitude);
+        const lonDiff = Math.abs(location.longitude - existing.longitude);
+        
+        return latDiff < tolerance && lonDiff < tolerance;
+      });
+
+      if (!isDuplicate) {
+        uniqueLocations.push(location);
+      }
+    }
+
+    return uniqueLocations;
   }
 }
 

@@ -22,11 +22,13 @@ export default function ProfileForm({ onSave, className = '', showHeader = true 
   const { showSuccess, showError } = useToast()
 
   const [formData, setFormData] = useState({
-    fullName: '',
+    firstName: '',
+    lastName: '',
     phone: '',
     skillLevel: 1,
     preferredPosition: '' as PreferredPosition | '',
     bio: '',
+    birthDate: '',
     postalCode: '',
     placeName: '',
     adminName1: '',
@@ -77,11 +79,13 @@ export default function ProfileForm({ onSave, className = '', showHeader = true 
         }
         
         setFormData({
-          fullName: profile.full_name || '',
+          firstName: profile.first_name || '',
+          lastName: profile.last_name || '',
           phone: profile.phone || '',
           skillLevel: profile.skill_level || 1,
           preferredPosition: profile.preferred_position || '',
           bio: profile.bio || '',
+          birthDate: profile.birth_date || '',
           postalCode: profile.postal_code || '',
           placeName: profile.place_name || '',
           adminName1: profile.admin_name1 || '',
@@ -192,11 +196,13 @@ export default function ProfileForm({ onSave, className = '', showHeader = true 
 
     try {
       console.log('Enviando datos del perfil:', {
-        full_name: formData.fullName.trim(),
+        first_name: formData.firstName.trim(),
+        last_name: formData.lastName.trim(),
         phone: formData.phone.trim() || null,
         skill_level: formData.skillLevel,
         preferred_position: formData.preferredPosition === '' ? null : formData.preferredPosition,
         bio: formData.bio.trim() || null,
+        birth_date: formData.birthDate || null,
         postal_code: formData.postalCode.trim() || null,
         place_name: formData.placeName.trim() || null,
         admin_name1: formData.adminName1.trim() || null,
@@ -213,11 +219,13 @@ export default function ProfileForm({ onSave, className = '', showHeader = true 
       })
 
       const { error } = await updateProfile({
-        full_name: formData.fullName.trim(),
+        first_name: formData.firstName.trim(),
+        last_name: formData.lastName.trim(),
         phone: formData.phone.trim() || null,
         skill_level: formData.skillLevel,
         preferred_position: formData.preferredPosition === '' ? null : formData.preferredPosition,
         bio: formData.bio.trim() || null,
+        birth_date: formData.birthDate || null,
         postal_code: formData.postalCode.trim() || null,
         place_name: formData.placeName.trim() || null,
         admin_name1: formData.adminName1.trim() || null,
@@ -268,11 +276,13 @@ export default function ProfileForm({ onSave, className = '', showHeader = true 
       }
 
       setFormData({
-        fullName: profile.full_name || '',
+        firstName: profile.first_name || '',
+        lastName: profile.last_name || '',
         phone: profile.phone || '',
         skillLevel: profile.skill_level || 1,
         preferredPosition: profile.preferred_position || '',
         bio: profile.bio || '',
+        birthDate: profile.birth_date || '',
         postalCode: profile.postal_code || '',
         placeName: profile.place_name || '',
         adminName1: profile.admin_name1 || '',
@@ -346,22 +356,41 @@ export default function ProfileForm({ onSave, className = '', showHeader = true 
           {/* Información básica */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label htmlFor="fullName" className="block text-sm font-semibold text-text-main mb-2 font-open-sans">
-                Nombre Completo *
+              <label htmlFor="firstName" className="block text-sm font-semibold text-text-main mb-2 font-open-sans">
+                Nombre *
               </label>
               <input
-                id="fullName"
-                name="fullName"
+                id="firstName"
+                name="firstName"
                 type="text"
-                value={formData.fullName}
+                value={formData.firstName}
                 onChange={handleInputChange}
                 className="w-full px-4 py-3 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-accent-primary focus:border-transparent transition-colors font-open-sans bg-bg-main text-text-main"
-                placeholder="Juan Pérez"
+                placeholder="Juan"
                 disabled={loading}
                 required
               />
             </div>
 
+            <div>
+              <label htmlFor="lastName" className="block text-sm font-semibold text-text-main mb-2 font-open-sans">
+                Apellido *
+              </label>
+              <input
+                id="lastName"
+                name="lastName"
+                type="text"
+                value={formData.lastName}
+                onChange={handleInputChange}
+                className="w-full px-4 py-3 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-accent-primary focus:border-transparent transition-colors font-open-sans bg-bg-main text-text-main"
+                placeholder="Pérez"
+                disabled={loading}
+                required
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label htmlFor="phone" className="block text-sm font-semibold text-text-main mb-2 font-open-sans">
                 Teléfono
@@ -374,6 +403,21 @@ export default function ProfileForm({ onSave, className = '', showHeader = true 
                 onChange={handleInputChange}
                 className="w-full px-4 py-3 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-accent-primary focus:border-transparent transition-colors font-open-sans bg-bg-main text-text-main"
                 placeholder="Ej: +00 000 000 0000"
+                disabled={loading}
+              />
+            </div>
+
+            <div>
+              <label htmlFor="birthDate" className="block text-sm font-semibold text-text-main mb-2 font-open-sans">
+                Fecha de Nacimiento
+              </label>
+              <input
+                id="birthDate"
+                name="birthDate"
+                type="date"
+                value={formData.birthDate}
+                onChange={handleInputChange}
+                className="w-full px-4 py-3 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-accent-primary focus:border-transparent transition-colors font-open-sans bg-bg-main text-text-main"
                 disabled={loading}
               />
             </div>

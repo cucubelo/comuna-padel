@@ -11,7 +11,7 @@ interface ProfileCompletionBannerProps {
 export default function ProfileCompletionBanner({
   className = "",
 }: ProfileCompletionBannerProps) {
-  const { profile } = useAuth();
+  const { profile, loading } = useAuth();
 
   // Verificar qué campos están incompletos
   const isProfileIncomplete = () => {
@@ -35,7 +35,7 @@ export default function ProfileCompletionBanner({
 
     const missing = [];
     if (!profile.phone) missing.push("Teléfono");
-    if (!profile.skill_level || profile.skill_level === 1)
+    if (!profile.skill_level || profile.skill_level <= 1)
       missing.push("Nivel de juego");
     if (!profile.preferred_position) missing.push('Posición preferida')
     
@@ -46,8 +46,8 @@ export default function ProfileCompletionBanner({
     return missing;
   };
 
-  // No mostrar el banner si el perfil está completo
-  if (!isProfileIncomplete()) {
+  // No mostrar el banner si está cargando o si el perfil está completo
+  if (loading || !isProfileIncomplete()) {
     return null;
   }
 

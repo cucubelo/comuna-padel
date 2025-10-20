@@ -3,15 +3,30 @@
 
 import React, { useState } from 'react'
 import Link from 'next/link'
-import { useAuth } from '@/contexts/AuthContext'
+import { useAuthQuery } from '@/hooks/useAuth'
+import { UserProfileSkeleton } from '@/components/ui/Suspense'
 import { usePathname } from 'next/navigation'
 import LogoutButton from '@/components/dashboard/LogoutButton'
 import SessionDebugger from '@/components/dashboard/SessionDebugger'
+import { getFullName } from '@/lib/utils'
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const { user, profile } = useAuth()
+  const { user, profile, isLoading } = useAuthQuery()
   const avatarUrl = profile?.avatar_url || null
-  const displayName = profile?.full_name || user?.email || 'Usuario'
+  
+  // Mejorar el manejo del nombre de usuario con loading state
+  const getDisplayName = () => {
+    // Si estamos cargando y no tenemos perfil aún, mostrar skeleton
+    if (isLoading || (user && !profile)) {
+      return null // Retornamos null para mostrar skeleton
+    }
+    
+    // Si tenemos perfil, usar first_name y last_name, sino usar email como fallback
+    return getFullName(profile?.first_name, profile?.last_name) || user?.email || 'Usuario'
+  }
+  
+  const displayName = getDisplayName()
+  
   const pathname = usePathname()
   const isActive = (route: string) => (route === '/dashboard' ? pathname === '/dashboard' : pathname.startsWith(route))
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
@@ -73,7 +88,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     </div>
                   )}
                 </div>
-                <span className="hidden md:inline text-text-secondary font-open-sans truncate max-w-[160px]">{displayName}</span>
+                {/* Mostrar skeleton o nombre */}
+                {displayName === null ? (
+                  <UserProfileSkeleton />
+                ) : (
+                  <span className="hidden md:inline text-text-secondary font-open-sans truncate max-w-[160px]">{displayName}</span>
+                )}
               </Link>
               <LogoutButton />
               <button
@@ -115,7 +135,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <div className={`pl-4 transition-all duration-300 ${groupsOpen ? 'max-h-40' : 'max-h-0 overflow-hidden'}`}>
                 <ul className="space-y-1 py-1">
                   <li>
-                    <Link href="/dashboard/groups/create" className={`block px-2 py-2 rounded-md ${isActive('/dashboard/groups') ? 'text-text-main' : 'text-text-secondary hover:text-text-main hover:bg-bg-secondary/50'}`}>
+                    <Link href="/dashboard/groups?tab=my-groups" className={`block px-2 py-2 rounded-md ${isActive('/dashboard/groups') ? 'text-text-main' : 'text-text-secondary hover:text-text-main hover:bg-bg-secondary/50'}`}>
                       Mis Grupos
                     </Link>
                   </li>

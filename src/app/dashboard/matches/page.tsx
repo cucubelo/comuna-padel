@@ -1,11 +1,12 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
+import Link from 'next/link'
 import { Tables, Enums } from '@/lib/types/supabase'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
 import MatchCard from '@/components/dashboard/MatchCard'
-import CreateMatchModal, { MatchFormData } from '@/components/dashboard/CreateMatchModal'
+import InvitationNotifications from '@/components/dashboard/InvitationNotifications'
 
 type MatchStatus = Enums<'match_status'>
 type ParticipantStatus = Enums<'participant_status'>
@@ -30,7 +31,6 @@ export default function MatchesPage() {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<FilterType>('all')
   const [view, setView] = useState<ViewType>('list')
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
 
   const fetchMatches = useCallback(async () => {
@@ -68,15 +68,51 @@ export default function MatchesPage() {
         .select(`
           *,
           groups (*),
-          profiles!matches_creator_id_fkey (*)
+          profiles!matches_creator_id_fkey (
+            first_name,
+            last_name
+          ),
+          match_participants (
+            *,
+            profiles (*)
+          )
         `)
         .in('group_id', groupIds)
+        .neq('status', 'canceled')
         .order('scheduled_at', { ascending: true })
 
       if (error) {
         console.warn('Error fetching matches:', error)
         setMatches([])
         return
+      }
+
+      // Cambiar automáticamente el estado de partidos pasados
+      const now = new Date()
+      const matchesToUpdate = data?.filter(match => 
+        match.status === 'scheduled' && 
+        new Date(match.scheduled_at) < now
+      ) || []
+
+      if (matchesToUpdate.length > 0) {
+        const updatePromises = matchesToUpdate.map(match =>
+          supabase
+            .from('matches')
+            .update({ status: 'completed' })
+            .eq('id', match.id)
+        )
+
+        try {
+          await Promise.all(updatePromises)
+          // Actualizar los datos localmente
+          data?.forEach(match => {
+            if (match.status === 'scheduled' && new Date(match.scheduled_at) < now) {
+              match.status = 'completed'
+            }
+          })
+        } catch (updateError) {
+          console.warn('Error updating match statuses:', updateError)
+        }
       }
 
       // Si hay partidos, obtener los participantes
@@ -112,9 +148,51 @@ export default function MatchesPage() {
           ...match,
           match_participants: participantsByMatch[match.id] || []
         }));
+
+        // Cambiar automáticamente el estado de partidos con 4+ participantes confirmados
+        const matchesToConfirm = matchesWithParticipants.filter(match => {
+          const confirmedParticipants = match.match_participants.filter(p => p.status === 'confirmed').length
+          return match.status === 'scheduled' && confirmedParticipants >= 4 && new Date(match.scheduled_at) > now
+        })
+
+        if (matchesToConfirm.length > 0) {
+          const confirmPromises = matchesToConfirm.map(match =>
+            supabase
+              .from('matches')
+              .update({ status: 'confirmed' })
+              .eq('id', match.id)
+          )
+
+          try {
+            await Promise.all(confirmPromises)
+            // Actualizar los datos localmente
+            matchesWithParticipants.forEach(match => {
+              const confirmedParticipants = match.match_participants.filter(p => p.status === 'confirmed').length
+              if (match.status === 'scheduled' && confirmedParticipants >= 4 && new Date(match.scheduled_at) > now) {
+                match.status = 'confirmed'
+              }
+            })
+          } catch (confirmError) {
+            console.warn('Error confirming matches:', confirmError)
+          }
+        }
       }
 
-      setMatches(matchesWithParticipants as Match[])
+      // Filtrar partidos privados: solo mostrar si el usuario es creador o está invitado
+      const filteredMatches = matchesWithParticipants.filter(match => {
+        // Si es público, siempre mostrar
+        if (match.is_public) return true;
+        
+        // Si es privado, solo mostrar si:
+        // 1. El usuario es el creador
+        if (match.creator_id === user?.id) return true;
+        
+        // 2. El usuario está invitado (tiene un registro en match_participants)
+        const isInvited = match.match_participants.some(p => p.user_id === user?.id);
+        return isInvited;
+      });
+
+      setMatches(filteredMatches as Match[])
     } catch (error) {
       console.error('Error fetching matches:', error)
       setMatches([])
@@ -147,7 +225,8 @@ export default function MatchesPage() {
         filtered = filtered.filter(match => {
           const isNotParticipant = !match.match_participants.some(p => p.user_id === user?.id)
           const isFuture = new Date(match.scheduled_at) > now
-          return isNotParticipant && isFuture && match.status === 'scheduled'
+          const hasSpace = match.match_participants.filter(p => p.status === 'confirmed').length < 4
+          return isNotParticipant && isFuture && match.status === 'scheduled' && hasSpace
         })
         break
       case 'upcoming':
@@ -174,41 +253,25 @@ export default function MatchesPage() {
     applyFilters()
   }, [matches, filter, searchTerm, applyFilters])
 
-  const handleCreateMatch = async (matchData: MatchFormData) => {
-    try {
-      const { data, error } = await supabase
-        .from('matches')
-        .insert([{
-          ...matchData,
-          creator_id: user?.id,
-          status: 'scheduled'
-        }])
-        .select()
-
-      if (error) throw error
-
-      // Add creator as participant
-      if (data && data[0]) {
-        await supabase
-          .from('match_participants')
-          .insert([{
-            match_id: data[0].id,
-            user_id: user?.id,
-            team_number: 1,
-            status: 'confirmed'
-          }])
-      }
-
-      // Refresh matches
-      await fetchMatches()
-    } catch (error) {
-      console.error('Error creating match:', error)
-      throw error
-    }
-  }
-
   const handleJoinMatch = async (matchId: string) => {
     try {
+      // Buscar el partido para verificar si es privado
+      const match = matches.find(m => m.id === matchId);
+      if (!match) {
+        console.error('Match not found');
+        return;
+      }
+
+      // Verificar si el partido es privado y el usuario no está invitado
+      if (!match.is_public) {
+        // Para partidos privados, verificar si el usuario ya tiene una invitación pendiente
+        const existingParticipant = match.match_participants.find(p => p.user_id === user?.id);
+        if (!existingParticipant || existingParticipant.status !== 'pending') {
+          console.error("Este es un partido privado. Solo puedes unirte si has sido invitado.");
+          return;
+        }
+      }
+
       const { error } = await supabase
         .from('match_participants')
         .insert([{
@@ -257,11 +320,14 @@ export default function MatchesPage() {
     }
   }
 
-  const getUserStatus = (match: Match): 'creator' | 'participant' | 'not_participant' => {
+  const getUserStatus = (match: Match): 'confirmed' | 'pending' | 'declined' | 'creator' | 'participant' | 'not_participant' | null => {
     if (match.creator_id === user?.id) return 'creator'
     const participant = match.match_participants.find(p => p.user_id === user?.id)
-    if (participant) return 'participant'
-    return 'not_participant'
+    if (participant) {
+      // Devolver el estado específico del participante
+      return participant.status as 'confirmed' | 'pending' | 'declined'
+    }
+    return null // Para usuarios que no participan, no mostrar estado
   }
 
   const getFilterCounts = () => {
@@ -275,7 +341,8 @@ export default function MatchesPage() {
       available: matches.filter(match => {
         const isNotParticipant = !match.match_participants.some(p => p.user_id === user?.id)
         const isFuture = new Date(match.scheduled_at) > now
-        return isNotParticipant && isFuture && match.status === 'scheduled'
+        const hasSpace = match.match_participants.filter(p => p.status === 'confirmed').length < 4
+        return isNotParticipant && isFuture && match.status === 'scheduled' && hasSpace
       }).length,
       upcoming: matches.filter(match => new Date(match.scheduled_at) > now).length,
       past: matches.filter(match => new Date(match.scheduled_at) <= now).length
@@ -314,12 +381,12 @@ export default function MatchesPage() {
               Organiza y participa en partidos de pádel
             </p>
           </div>
-          <button
-            onClick={() => setIsCreateModalOpen(true)}
-            className="mt-4 sm:mt-0 bg-accent-primary text-bg-main px-6 py-3 rounded-lg hover:bg-accent-primary/90 transition-colors font-open-sans font-medium shadow-lg"
+          <Link 
+            href="/dashboard/matches/create"
+            className="mt-4 sm:mt-0 bg-accent-primary text-bg-main px-6 py-3 rounded-lg hover:bg-accent-primary/90 transition-colors font-open-sans font-medium shadow-lg inline-block"
           >
             + Crear Partido
-          </button>
+          </Link>
         </div>
 
         {/* Search and Filters */}
@@ -394,6 +461,9 @@ export default function MatchesPage() {
           </div>
         </div>
 
+        {/* Invitation Notifications */}
+        <InvitationNotifications />
+
         {/* Content */}
         {view === 'list' ? (
           <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
@@ -414,7 +484,9 @@ export default function MatchesPage() {
                     status: match.status,
                     current_participants: match.match_participants.filter(p => p.status === 'confirmed').length,
                     group_name: match.groups?.name || 'Sin grupo',
-                    creator_name: match.profiles?.full_name || 'Creador desconocido',
+                    creator_name: match.profiles 
+          ? [match.profiles.first_name, match.profiles.last_name].filter(Boolean).join(' ') || 'Creador desconocido'
+          : 'Creador desconocido',
                     user_status: getUserStatus(match)
                   }}
                   onJoin={() => handleJoinMatch(match.id)}
@@ -440,12 +512,12 @@ export default function MatchesPage() {
                   }
                 </p>
                 {filter !== 'my_matches' && (
-                  <button
-                    onClick={() => setIsCreateModalOpen(true)}
-                    className="bg-accent-primary text-bg-main px-6 py-2 rounded-lg hover:bg-accent-primary/90 transition-colors font-open-sans"
+                  <Link
+                    href="/dashboard/matches/create"
+                    className="bg-accent-primary text-bg-main px-6 py-2 rounded-lg hover:bg-accent-primary/90 transition-colors font-open-sans inline-block"
                   >
                     Crear Primer Partido
-                  </button>
+                  </Link>
                 )}
               </div>
             )}
@@ -464,14 +536,6 @@ export default function MatchesPage() {
           </div>
         )}
       </div>
-
-      {/* Create Match Modal */}
-      <CreateMatchModal
-        isOpen={isCreateModalOpen}
-        onClose={() => setIsCreateModalOpen(false)}
-        onSubmit={handleCreateMatch}
-        userId={user?.id || ''}
-      />
     </div>
   )
 }

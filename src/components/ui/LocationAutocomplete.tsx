@@ -1,14 +1,14 @@
 'use client'
 
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { MapPin, Globe } from 'lucide-react'
-import { locationService, Location } from '@/lib/locationService'
+import { MapPin, Globe, Building2, Dumbbell } from 'lucide-react'
+import { sportsLocationService, type SportsLocationResult } from '@/lib/sportsLocationService'
 import { cn } from '@/lib/utils'
 
 interface LocationAutocompleteProps {
   value?: string
-  onChange?: (location: Location | null) => void
-  onLocationSelect?: (location: Location | null) => void
+  onChange?: (location: SportsLocationResult | null) => void
+  onLocationSelect?: (location: SportsLocationResult | null) => void
   onInputChange?: (value: string) => void
   placeholder?: string
   showCountryFlags?: boolean
@@ -16,10 +16,18 @@ interface LocationAutocompleteProps {
   required?: boolean
   className?: string
   countryFilter?: string
-  // Nuevas props para el selector de país
-  selectedCountry?: string
-  onCountryChange?: (countryCode: string) => void
-  showCountrySelector?: boolean
+  regionFilter?: string // Prop para filtrar por región/comunidad
+  cityFilter?: string // Nueva prop para filtrar por ciudad específica
+  // Nueva prop para información del grupo
+  groupLocationInfo?: {
+    city?: string
+    region?: string
+    coordinates?: { lat: number; lng: number }
+  }
+  // Nueva prop para búsqueda deportiva
+  sportsMode?: boolean
+  // Nueva prop para evitar búsquedas automáticas cuando se muestra un valor existente
+  skipInitialSearch?: boolean
 }
 
 export default function LocationAutocomplete({
@@ -27,49 +35,73 @@ export default function LocationAutocomplete({
   onChange,
   onLocationSelect,
   onInputChange,
-  placeholder = 'Buscar ubicación...',
+  placeholder = 'Buscar ubicación deportiva...',
   showCountryFlags = true,
   disabled = false,
   required = false,
   className = '',
   countryFilter,
-  // Nuevas props para el selector de país
-  selectedCountry = '',
-  onCountryChange,
-  showCountrySelector = true
+  regionFilter, // Prop para filtrar por región
+  cityFilter, // Nueva prop para filtrar por ciudad específica
+  groupLocationInfo, // Nueva prop para información del grupo
+  // Nueva prop para búsqueda deportiva
+  sportsMode = true,
+  // Nueva prop para evitar búsquedas automáticas
+  skipInitialSearch = false
 }: LocationAutocompleteProps) {
   const [inputValue, setInputValue] = useState(value)
-  const [suggestions, setSuggestions] = useState<Location[]>([])
-  const [isLoading, setIsLoading] = useState(false)
+  const [suggestions, setSuggestions] = useState<SportsLocationResult[]>([])
   const [isOpen, setIsOpen] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
   const [selectedIndex, setSelectedIndex] = useState(-1)
-  const [countries, setCountries] = useState<Array<{ code: string; name: string; flag: string }>>([])
-  
+  const [categoryLabels, setCategoryLabels] = useState<Record<string, string>>({})
+  const [isSelecting, setIsSelecting] = useState(false) // Bandera para evitar búsquedas durante selección
   const inputRef = useRef<HTMLInputElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
   
   // Función para manejar la selección de ubicación
-  const handleLocationSelect = useCallback((location: Location | null) => {
+  const handleLocationSelect = useCallback((location: SportsLocationResult | null) => {
     if (onChange) onChange(location)
     if (onLocationSelect) onLocationSelect(location)
   }, [onChange, onLocationSelect])
+
+  // Cargar categorías dinámicamente al montar el componente
+  useEffect(() => {
+    const loadCategories = async () => {
+      try {
+        const categories = await sportsLocationService.getAvailableCategories()
+        const labelsMap = categories.reduce((acc, category) => {
+          acc[category.value] = category.label
+          return acc
+        }, {} as Record<string, string>)
+        setCategoryLabels(labelsMap)
+      } catch (error) {
+        console.error('Error loading categories:', error)
+        // Fallback a categorías hardcodeadas en caso de error
+        setCategoryLabels({
+          'club_tenis': 'Club de Tenis',
+          'club_padel': 'Club de Pádel',
+          'club_deportivo': 'Club Deportivo',
+          'gimnasio': 'Gimnasio',
+          'polideportivo': 'Polideportivo',
+          'centro_fitness': 'Centro de Fitness',
+          'piscina': 'Piscina',
+          'campo_futbol': 'Campo de Fútbol'
+        })
+      }
+    }
+
+    loadCategories()
+  }, [])
 
   // Actualizar valor interno cuando cambia el prop value
   useEffect(() => {
     setInputValue(value)
   }, [value])
 
-  // Cargar países soportados al montar el componente
-  useEffect(() => {
-    if (showCountrySelector) {
-      const supportedCountries = locationService.getSupportedCountries()
-      setCountries(supportedCountries)
-    }
-  }, [showCountrySelector])
-
   // Crear función de búsqueda con debounce
   const searchFunction = useCallback(async (searchTerm: string) => {
-    if (searchTerm.length < 2) {
+    if (searchTerm.length < 1) {
       setSuggestions([]);
       setIsOpen(false);
       return;
@@ -77,29 +109,45 @@ export default function LocationAutocomplete({
 
     setIsLoading(true);
     try {
-      // Usar el país seleccionado como filtro si está disponible
-      const countryToFilter = selectedCountry || countryFilter;
-      const locations = await locationService.searchLocations(searchTerm, countryToFilter);
-      
+      // Usar el país del filtro para búsquedas más precisas
+      const locations = await sportsLocationService.searchSportsLocations(
+        searchTerm,
+        countryFilter || 'ES', // Usar España como default si no hay filtro
+        8, // Limitar a 8 resultados
+        regionFilter, // Pasar el filtro de región
+        cityFilter, // Pasar el filtro de ciudad
+        groupLocationInfo // Pasar información del grupo para mejorar la búsqueda
+      );
+
       setSuggestions(locations);
       
-      // Abrir dropdown solo si hay resultados
+      // Solo abrir si hay resultados
       const shouldOpen = locations.length > 0;
       setIsOpen(shouldOpen);
-      
+
     } catch (error) {
-      console.error('Error searching locations:', error);
+      console.error('Error searching sports locations:', error);
       setSuggestions([]);
       setIsOpen(false);
     } finally {
       setIsLoading(false);
     }
-  }, [selectedCountry, countryFilter]);
+  }, [countryFilter, regionFilter, cityFilter, groupLocationInfo]);
 
-  // Debounce para búsqueda - optimizado para evitar búsquedas excesivas
+  // Efecto para búsqueda con debounce
   useEffect(() => {
+    // No buscar si estamos en proceso de selección
+    if (isSelecting) {
+      return;
+    }
+
+    // No buscar si skipInitialSearch está activado y el valor coincide con el prop value inicial
+    if (skipInitialSearch && inputValue === value && value.length > 0) {
+      return;
+    }
+
     if (inputValue.length >= 2) {
-      // Debounce de 500ms para evitar búsquedas en cada tecla
+      // Debounce de 500ms para evitar demasiadas llamadas
       const timeoutId = setTimeout(() => {
         searchFunction(inputValue);
       }, 500);
@@ -111,9 +159,9 @@ export default function LocationAutocomplete({
       setSuggestions([]);
       setIsOpen(false);
     }
-  }, [inputValue, searchFunction]);
+  }, [inputValue, searchFunction, isSelecting, skipInitialSearch, value]);
 
-  // Cerrar dropdown al hacer clic fuera
+  // Manejar clics fuera del componente
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
@@ -133,6 +181,11 @@ export default function LocationAutocomplete({
     const newValue = e.target.value;
     setInputValue(newValue);
     
+    // Si el usuario está escribiendo, desactivar la bandera de selección
+    if (isSelecting) {
+      setIsSelecting(false);
+    }
+
     if (onInputChange) {
       onInputChange(newValue);
     }
@@ -143,15 +196,36 @@ export default function LocationAutocomplete({
       setIsOpen(false);
       handleLocationSelect(null);
     }
-    // El dropdown se abrirá automáticamente cuando lleguen los resultados en searchFunction
+
   };
 
-  const selectLocation = (location: Location) => {
-    setInputValue(location.display_name)
+  const selectLocation = async (location: SportsLocationResult) => {
+    setIsSelecting(true) // Activar bandera para evitar búsquedas
+    setInputValue(location.name)
     setIsOpen(false)
     setSuggestions([])
     setSelectedIndex(-1)
+
+    // Incrementar contador de uso
+    await sportsLocationService.incrementUsageCount(location.id, location.source)
+
+    // Si es de Google Places, guardarlo localmente
+    if (location.source === 'google') {
+      try {
+        const savedId = await sportsLocationService.saveSportsLocationFromGoogle(location)
+        if (savedId) {
+          // Actualizar el ID y source de la ubicación
+          location.id = savedId
+          location.source = 'local'
+        }
+      } catch (error) {
+        console.error('Error saving Google Places location:', error)
+      }
+    }
+    
     handleLocationSelect(location)
+    
+    // La bandera se desactivará cuando el usuario empiece a escribir de nuevo
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -198,7 +272,7 @@ export default function LocationAutocomplete({
   }
 
   const handleBlur = () => {
-    // Cerrar dropdown con un pequeño delay para permitir clicks
+    // Delay para permitir clicks en el dropdown
     setTimeout(() => {
       setIsOpen(false)
       setSelectedIndex(-1)
@@ -206,100 +280,130 @@ export default function LocationAutocomplete({
   }
 
   const handleClick = () => {
-    // Abrir dropdown si hay suggestions al hacer click
+    // Solo abrir si hay suggestions de búsqueda
     if (suggestions.length > 0) {
       setIsOpen(true)
     }
   }
 
-  // Solo mostrar suggestions de búsqueda, no ubicaciones populares
+  // Usar solo las suggestions de búsqueda
   const displaySuggestions = suggestions
 
-  // Debug render - solo para desarrollo
-  if (process.env.NODE_ENV === 'development') {
-    // Logs mínimos solo en desarrollo
+  // Función para obtener el icono según la categoría deportiva
+  const getLocationIcon = (location: SportsLocationResult) => {
+    switch (location.category) {
+      case 'club_tenis':
+        return <Dumbbell className="h-4 w-4 text-green-500 flex-shrink-0" />
+      case 'club_padel':
+        return <Dumbbell className="h-4 w-4 text-accent-primary flex-shrink-0" />
+      case 'gimnasio':
+      case 'centro_fitness':
+        return <Dumbbell className="h-4 w-4 text-blue-500 flex-shrink-0" />
+      case 'polideportivo':
+        return <Building2 className="h-4 w-4 text-purple-500 flex-shrink-0" />
+      case 'club_deportivo':
+        return <Building2 className="h-4 w-4 text-orange-500 flex-shrink-0" />
+      default:
+        return <MapPin className="h-4 w-4 text-text-secondary flex-shrink-0" />
+    }
+  }
+
+  // Función para obtener el texto descriptivo del tipo de lugar
+  const getLocationTypeText = (location: SportsLocationResult) => {
+    return categoryLabels[location.category] || 'Centro Deportivo'
+  }
+
+  const getCountryName = (countryCode: string): string => {
+    const countryNames: Record<string, string> = {
+      'ES': 'España',
+      'AR': 'Argentina',
+      'MX': 'México',
+      'CO': 'Colombia',
+      'CL': 'Chile',
+      'PE': 'Perú',
+      'EC': 'Ecuador',
+      'VE': 'Venezuela',
+      'UY': 'Uruguay',
+      'PY': 'Paraguay',
+      'BO': 'Bolivia',
+      'BR': 'Brasil'
+    }
+    return countryNames[countryCode] || countryCode
+  }
+
+  const getCountryInfo = (countryCode: string) => {
+    const countryData: Record<string, { name: string; flag: string }> = {
+      'ES': { name: 'España', flag: '🇪🇸' },
+      'AR': { name: 'Argentina', flag: '🇦🇷' },
+      'MX': { name: 'México', flag: '🇲🇽' },
+      'CO': { name: 'Colombia', flag: '🇨🇴' },
+      'CL': { name: 'Chile', flag: '🇨🇱' },
+      'PE': { name: 'Perú', flag: '🇵🇪' },
+      'EC': { name: 'Ecuador', flag: '🇪🇨' },
+      'VE': { name: 'Venezuela', flag: '🇻🇪' },
+      'UY': { name: 'Uruguay', flag: '🇺🇾' },
+      'PY': { name: 'Paraguay', flag: '🇵🇾' },
+      'BO': { name: 'Bolivia', flag: '🇧🇴' },
+      'BR': { name: 'Brasil', flag: '🇧🇷' }
+    }
+    return countryData[countryCode] || { name: countryCode, flag: '🌍' }
   }
 
   return (
     <div className={cn("relative w-full", className)}>
-      {/* Selector de País */}
-      {showCountrySelector && (
-        <div className="mb-3">
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            País
-          </label>
-          <select
-            value={selectedCountry}
-            onChange={(e) => {
-              const newCountry = e.target.value
-              if (onCountryChange) {
-                onCountryChange(newCountry)
-              }
-              // Limpiar búsqueda actual cuando cambia el país
-              if (newCountry !== selectedCountry) {
-                setInputValue('')
-                setSuggestions([])
-                setIsOpen(false)
-                if (onInputChange) onInputChange('')
-              }
-            }}
+      <div className="relative">
+        <div className="relative">
+          <input
+            ref={inputRef}
+            type="text"
+            value={inputValue}
+            onChange={handleInputChange}
+            onKeyDown={handleKeyDown}
+            onFocus={handleFocus}
+            onBlur={handleBlur}
+            onClick={handleClick}
+            placeholder={placeholder}
             className={cn(
-              "w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm",
-              "focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
-              "disabled:bg-gray-50 disabled:text-gray-500",
-              "bg-white"
+              "w-full pl-10 pr-10 py-2.5 border border-border rounded-lg shadow-sm",
+              "focus:outline-none focus:ring-2 focus:ring-accent-primary focus:border-accent-primary",
+              "disabled:bg-bg-secondary disabled:text-text-secondary disabled:cursor-not-allowed",
+              "bg-bg-main text-text-main font-open-sans placeholder:text-text-secondary",
+              "transition-colors duration-200",
+              // Responsive design
+              "text-base sm:text-sm", // Larger text on mobile for better readability
+              "min-h-[44px] sm:min-h-[40px]", // Larger touch targets on mobile
+              className
             )}
             disabled={disabled}
-          >
-            <option value="">Seleccionar país...</option>
-            {countries.map((country) => (
-              <option key={country.code} value={country.code}>
-                {country.flag} {country.name}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
-
-      {/* Input de Ubicación */}
-      <div className="relative">
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          Ubicación
-        </label>
-        <input
-          ref={inputRef}
-          type="text"
-          value={inputValue}
-          onChange={handleInputChange}
-          onKeyDown={handleKeyDown}
-          onFocus={handleFocus}
-          onBlur={handleBlur}
-          onClick={handleClick}
-          placeholder={selectedCountry ? `Buscar en ${countries.find(c => c.code === selectedCountry)?.name || 'país seleccionado'}...` : placeholder}
-          className={cn(
-            "w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm",
-            "focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
-            "disabled:bg-gray-50 disabled:text-gray-500",
-            className
-          )}
-          disabled={disabled || (!selectedCountry && showCountrySelector)}
-          required={required}
-          autoComplete="off"
-        />
-        
-        {/* Indicador de carga */}
-        {isLoading && (
-          <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
+            required={required}
+            autoComplete="off"
+          />
+          
+          {/* Icono de ubicación */}
+          <div className="absolute left-3 top-1/2 transform -translate-y-1/2 pointer-events-none">
+            <MapPin className="h-4 w-4 text-text-secondary" />
           </div>
-        )}
+          
+          {/* Indicador de carga */}
+          {isLoading && (
+            <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+              <div className="animate-spin rounded-full h-4 w-4 border-2 border-accent-primary border-t-transparent"></div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Dropdown de sugerencias */}
       {isOpen && displaySuggestions.length > 0 && (
         <div
           ref={dropdownRef}
-          className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-auto"
+          className={cn(
+            "absolute z-50 w-full mt-1 bg-bg-main border border-border rounded-lg shadow-lg",
+            "max-h-60 overflow-auto",
+            // Responsive design
+            "max-h-48 sm:max-h-60", // Smaller max height on mobile to prevent viewport issues
+            "shadow-xl sm:shadow-lg" // Stronger shadow on mobile for better visibility
+          )}
         >
           {displaySuggestions.map((location, index) => (
             <button
@@ -307,28 +411,39 @@ export default function LocationAutocomplete({
               type="button"
               onClick={() => selectLocation(location)}
               className={cn(
-                "w-full px-3 py-2 text-left hover:bg-gray-50 focus:bg-gray-50 focus:outline-none",
+                "w-full px-3 py-3 sm:py-2 text-left hover:bg-bg-secondary focus:bg-bg-secondary focus:outline-none",
                 "flex items-center space-x-3",
-                selectedIndex === index && "bg-blue-50 text-blue-700"
+                "transition-colors duration-150",
+                // Responsive design
+                "active:bg-accent-primary/10", // Visual feedback on mobile tap
+                "min-h-[52px] sm:min-h-[auto]", // Larger touch targets on mobile
+                selectedIndex === index && "bg-accent-primary/10 text-accent-primary"
               )}
             >
-              <MapPin className="h-4 w-4 text-gray-400 flex-shrink-0" />
+              {getLocationIcon(location)}
               
               <div className="flex-1 min-w-0">
-                <div className="font-medium text-gray-900 truncate">
-                  {location.name}
+                <div className="flex items-center space-x-2">
+                  <span className="font-medium text-text-main truncate font-open-sans text-sm sm:text-sm">
+                    {location.name}
+                  </span>
+                  {getLocationTypeText(location) && (
+                    <span className="text-xs bg-accent-primary/10 text-accent-primary px-2 py-0.5 rounded-full font-open-sans flex-shrink-0">
+                      {getLocationTypeText(location)}
+                    </span>
+                  )}
                 </div>
-                <div className="text-sm text-gray-500 truncate">
-                  {location.display_name}
+                <div className="text-xs sm:text-sm text-text-secondary truncate font-open-sans">
+                  {location.address}
                 </div>
               </div>
               
               {showCountryFlags && location.country_code && (
                 <div className="flex items-center space-x-1 flex-shrink-0">
                   <span className="text-sm">
-                    {locationService.getCountryInfo(location.country_code)?.flag || '🌍'}
+                    {getCountryInfo(location.country_code)?.flag || '🌍'}
                   </span>
-                  <span className="text-xs text-gray-400 uppercase">
+                  <span className="text-xs text-text-secondary uppercase font-open-sans">
                     {location.country_code}
                   </span>
                 </div>
@@ -337,10 +452,10 @@ export default function LocationAutocomplete({
           ))}
           
           {suggestions.length === 0 && inputValue.length >= 2 && !isLoading && (
-            <div className="px-3 py-4 text-center text-gray-500">
-              <Globe className="h-8 w-8 mx-auto mb-2 text-gray-300" />
-              <p className="text-sm">No se encontraron ubicaciones</p>
-              <p className="text-xs text-gray-400 mt-1">
+            <div className="px-3 py-6 sm:py-4 text-center text-text-secondary">
+              <Globe className="h-8 w-8 mx-auto mb-2 text-text-secondary/50" />
+              <p className="text-sm font-open-sans">No se encontraron ubicaciones</p>
+              <p className="text-xs text-text-secondary/70 mt-1 font-open-sans">
                 Intenta con otro término de búsqueda
               </p>
             </div>

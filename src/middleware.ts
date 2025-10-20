@@ -64,11 +64,10 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     /*
-     * Match all request paths except for the ones starting with:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
+     * Excluir todas las rutas internas de Next.js bajo /_next/* para evitar que la middleware
+     * intercepte peticiones internas del dev server (como /_next/src/*) que terminan en 404.
+     * También excluimos favicon.ico.
      */
-    '/((?!_next/static|_next/image|favicon.ico).*)',
+    '/((?!_next/|_next/static|_next/image|favicon.ico).*)',
   ],
 }

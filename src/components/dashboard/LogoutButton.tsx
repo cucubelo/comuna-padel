@@ -2,10 +2,12 @@
 
 import React, { useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
+import { useToast } from '@/contexts/ToastContext'
 import { useRouter } from 'next/navigation'
 
 export default function LogoutButton() {
   const { signOut } = useAuth()
+  const { showError } = useToast()
   const router = useRouter()
   const [loading, setLoading] = useState(false)
 
@@ -17,14 +19,14 @@ export default function LogoutButton() {
       const { error } = await signOut()
       if (error) {
         console.error('Error cerrando sesión:', error)
-        alert('Error al cerrar sesión. Por favor, intenta de nuevo.')
+        showError('Error al cerrar sesión. Por favor, intenta de nuevo.')
       } else {
         // Redirigir al login después de cerrar sesión exitosamente
         router.push('/auth')
       }
     } catch (error) {
       console.error('Error inesperado cerrando sesión:', error)
-      alert('Error inesperado al cerrar sesión.')
+      showError('Error inesperado al cerrar sesión.')
     } finally {
       setLoading(false)
     }

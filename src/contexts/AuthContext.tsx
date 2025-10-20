@@ -6,13 +6,15 @@ import { supabase, Database } from "@/lib/supabase";
 
 // Tipos para el contexto de autenticación
 interface UserData {
-  full_name?: string;
+  first_name?: string;
+  last_name?: string;
   phone?: string;
   skill_level?: number;
   preferred_position?: string;
   bio?: string;
   location?: string;
   username?: string;
+  birth_date?: string;
 }
 
 type Profile = Database["public"]["Tables"]["profiles"]["Row"];
@@ -49,7 +51,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Función para cargar el perfil del usuario
+  // Load user profile with better error handling
   const loadProfile = async (userId: string) => {
     try {
       const { data, error } = await supabase
@@ -78,7 +80,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const profileData: ProfileInsert = {
               id: userId,
               username,
-              full_name: user.user_metadata?.full_name || null,
+              first_name: user.user_metadata?.first_name || null,
+              last_name: user.user_metadata?.last_name || null,
+              birth_date: user.user_metadata?.birth_date || null,
               skill_level:
                 typeof user.user_metadata?.skill_level === "number"
                   ? user.user_metadata?.skill_level
@@ -96,7 +100,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 "Error creando perfil automáticamente:",
                 createError
               );
-              return null;
+              throw createError;
             }
 
             return newProfile;
@@ -106,13 +110,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         console.error("Error cargando perfil:", error);
-        return null;
+        throw error;
       }
 
       return data;
     } catch (error) {
       console.error("Error inesperado cargando perfil:", error);
-      return null;
+      throw error;
     }
   };
 
@@ -136,7 +140,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         password,
         options: {
           data: {
-            full_name: userData?.full_name || "",
+            first_name: userData?.first_name || "",
+            last_name: userData?.last_name || "",
             phone: userData?.phone || "",
             skill_level:
               typeof userData?.skill_level === "number"
@@ -145,6 +150,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             preferred_position: userData?.preferred_position || "both",
             bio: userData?.bio || "",
             location: userData?.location || "",
+            birth_date: userData?.birth_date || "",
           },
         },
       });
@@ -165,7 +171,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const newProfileData: ProfileInsert = {
           id: data.user.id,
           username,
-          full_name: userData?.full_name || null,
+          first_name: userData?.first_name || null,
+          last_name: userData?.last_name || null,
+          birth_date: userData?.birth_date || null,
           skill_level:
             typeof userData?.skill_level === "number"
               ? userData.skill_level
@@ -276,14 +284,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log("Iniciando updateProfile con datos:", profileData);
       console.log("Usuario actual:", user.id);
 
-      // Usar upsert para manejar tanto insert como update
+      // Verificar si el perfil ya existe
+      const { data: existingProfile } = await supabase
+        .from("profiles")
+        .select("username")
+        .eq("id", user.id)
+        .single();
+
+      // Preparar datos para actualizar/crear
       const profileToUpsert: ProfileInsert = {
         id: user.id,
-        username: profileData.username ||
-          (profileData.full_name?.toLowerCase().replace(/\s+/g, "_") + "_" + Math.random().toString(36).substr(2, 9)),
         ...profileData,
         updated_at: new Date().toISOString(),
       };
+
+      // Si el perfil ya existe, NO permitir cambios en el username
+      if (existingProfile) {
+        // Remover username de los datos a actualizar para preservar el existente
+        delete profileToUpsert.username;
+        console.log("Perfil existente encontrado, username será preservado");
+      } else {
+        // Si es un perfil nuevo, generar username solo si no se proporciona uno
+        if (!profileData.username) {
+          profileToUpsert.username = profileData.first_name && profileData.last_name
+            ? `${profileData.first_name}_${profileData.last_name}`.toLowerCase().replace(/\s+/g, "_") + "_" + Math.random().toString(36).substr(2, 6)
+            : profileData.first_name
+            ? profileData.first_name.toLowerCase().replace(/\s+/g, "_") + "_" + Math.random().toString(36).substr(2, 6)
+            : `user_${user.id.slice(0, 8)}`;
+        }
+        console.log("Perfil nuevo, generando username:", profileToUpsert.username);
+      }
 
       console.log("Datos para upsert:", profileToUpsert);
 

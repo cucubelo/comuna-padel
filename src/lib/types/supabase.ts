@@ -214,6 +214,7 @@ export type Database = {
           name: string
           place_name: string | null
           postal_code: string | null
+          slug: string
         }
         Insert: {
           admin_code1?: string | null
@@ -235,6 +236,7 @@ export type Database = {
           name: string
           place_name?: string | null
           postal_code?: string | null
+          slug?: string | null
         }
         Update: {
           admin_code1?: string | null
@@ -256,6 +258,7 @@ export type Database = {
           name?: string
           place_name?: string | null
           postal_code?: string | null
+          slug?: string | null
         }
         Relationships: [
           {
@@ -300,6 +303,99 @@ export type Database = {
           {
             foreignKeyName: "match_participants_user_id_fkey"
             columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      match_sets: {
+        Row: {
+          created_at: string
+          id: string
+          is_tiebreak: boolean
+          match_id: string
+          set_number: number
+          team1_score: number
+          team2_score: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_tiebreak?: boolean
+          match_id: string
+          set_number: number
+          team1_score: number
+          team2_score: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_tiebreak?: boolean
+          match_id?: string
+          set_number?: number
+          team1_score?: number
+          team2_score?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "match_sets_match_id_fkey"
+            columns: ["match_id"]
+            isOneToOne: false
+            referencedRelation: "matches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      match_teams: {
+        Row: {
+          created_at: string
+          id: string
+          match_id: string
+          player1_id: string
+          player2_id: string
+          team_number: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          match_id: string
+          player1_id: string
+          player2_id: string
+          team_number: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          match_id?: string
+          player1_id?: string
+          player2_id?: string
+          team_number?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "match_teams_match_id_fkey"
+            columns: ["match_id"]
+            isOneToOne: false
+            referencedRelation: "matches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "match_teams_player1_id_fkey"
+            columns: ["player1_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "match_teams_player2_id_fkey"
+            columns: ["player2_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -481,12 +577,14 @@ export type Database = {
           admin_name3: string | null
           avatar_url: string | null
           bio: string | null
+          birth_date: string | null
           city: string | null
           country: string | null
           country_code: string | null
           created_at: string
-          full_name: string | null
+          first_name: string | null
           id: string
+          last_name: string | null
           latitude: number | null
           longitude: number | null
           matches_lost: number
@@ -512,12 +610,14 @@ export type Database = {
           admin_name3?: string | null
           avatar_url?: string | null
           bio?: string | null
+          birth_date?: string | null
           city?: string | null
           country?: string | null
           country_code?: string | null
           created_at?: string
-          full_name?: string | null
+          first_name?: string | null
           id: string
+          last_name?: string | null
           latitude?: number | null
           longitude?: number | null
           matches_lost?: number
@@ -543,12 +643,14 @@ export type Database = {
           admin_name3?: string | null
           avatar_url?: string | null
           bio?: string | null
+          birth_date?: string | null
           city?: string | null
           country?: string | null
           country_code?: string | null
           created_at?: string
-          full_name?: string | null
+          first_name?: string | null
           id?: string
+          last_name?: string | null
           latitude?: number | null
           longitude?: number | null
           matches_lost?: number
@@ -567,6 +669,81 @@ export type Database = {
         }
         Relationships: []
       }
+      sports_locations: {
+        Row: {
+          address: string
+          category: string
+          city: string | null
+          country: string
+          country_code: string
+          created_at: string | null
+          google_place_id: string | null
+          google_types: string[] | null
+          id: string
+          is_active: boolean | null
+          is_verified: boolean | null
+          last_used_at: string | null
+          latitude: number | null
+          longitude: number | null
+          name: string
+          phone: string | null
+          price_level: number | null
+          rating: number | null
+          state: string | null
+          updated_at: string | null
+          usage_count: number | null
+          website: string | null
+        }
+        Insert: {
+          address: string
+          category: string
+          city?: string | null
+          country: string
+          country_code: string
+          created_at?: string | null
+          google_place_id?: string | null
+          google_types?: string[] | null
+          id?: string
+          is_active?: boolean | null
+          is_verified?: boolean | null
+          last_used_at?: string | null
+          latitude?: number | null
+          longitude?: number | null
+          name: string
+          phone?: string | null
+          price_level?: number | null
+          rating?: number | null
+          state?: string | null
+          updated_at?: string | null
+          usage_count?: number | null
+          website?: string | null
+        }
+        Update: {
+          address?: string
+          category?: string
+          city?: string | null
+          country?: string
+          country_code?: string
+          created_at?: string | null
+          google_place_id?: string | null
+          google_types?: string[] | null
+          id?: string
+          is_active?: boolean | null
+          is_verified?: boolean | null
+          last_used_at?: string | null
+          latitude?: number | null
+          longitude?: number | null
+          name?: string
+          phone?: string | null
+          price_level?: number | null
+          rating?: number | null
+          state?: string | null
+          updated_at?: string | null
+          usage_count?: number | null
+          website?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -579,6 +756,14 @@ export type Database = {
           p_postal_code: string
         }
         Returns: undefined
+      }
+      increment_sports_location_usage: {
+        Args: { location_id: string }
+        Returns: undefined
+      }
+      validate_username: {
+        Args: { username_input: string }
+        Returns: boolean
       }
     }
     Enums: {

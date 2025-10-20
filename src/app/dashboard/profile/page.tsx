@@ -8,6 +8,7 @@ import ProfileForm from '@/components/dashboard/ProfileForm'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
 import { useToast } from '@/contexts/ToastContext'
+import { getFullName } from '@/lib/utils'
 // import { Tables } from '@/lib/types/supabase' // eliminado: tipos basados en columnas inexistentes
 
 interface NotificationSettings {
@@ -116,13 +117,79 @@ export default function ProfilePage() {
     }
   }, [profile])
 
+  // Función para cargar partidos recientes
+  const fetchRecentMatches = useCallback(async () => {
+    try {
+      if (!user?.id) return
+
+      // Por ahora usamos datos de ejemplo ya que la tabla matches puede no tener datos
+      // En el futuro, esto consultará la tabla matches real
+      const mockMatches: RecentMatch[] = [
+        { opponent: 'Juan Pérez', outcome: 'win' },
+        { opponent: 'María García', outcome: 'loss' },
+        { opponent: 'Carlos López', outcome: 'win' }
+      ]
+      
+      setRecentMatches(mockMatches)
+    } catch (error) {
+      console.error('Error fetching recent matches:', error)
+      setRecentMatches([])
+    }
+  }, [user?.id])
+
+  // Función para cargar grupos del usuario
+  const fetchMyGroups = useCallback(async () => {
+    try {
+      if (!user?.id) return
+
+      const { data: groupMembers, error } = await supabase
+        .from('group_members')
+        .select(`
+          groups (
+            id,
+            name
+          )
+        `)
+        .eq('user_id', user.id)
+
+      if (error) {
+        console.error('Error fetching user groups:', error)
+        setMyGroups([])
+        return
+      }
+
+      // Contar miembros para cada grupo
+      const groupsWithMemberCount = await Promise.all(
+        (groupMembers || []).map(async (member: any) => {
+          if (!member.groups) return null
+
+          const { count } = await supabase
+            .from('group_members')
+            .select('*', { count: 'exact', head: true })
+            .eq('group_id', member.groups.id)
+
+          return {
+            name: member.groups.name,
+            members: count || 0
+          }
+        })
+      )
+
+      const validGroups = groupsWithMemberCount.filter(group => group !== null) as UserGroup[]
+      setMyGroups(validGroups)
+    } catch (error) {
+      console.error('Error fetching user groups:', error)
+      setMyGroups([])
+    }
+  }, [user?.id])
+
   useEffect(() => {
     if (user) {
       loadUserSettings()
       fetchRecentMatches()
       fetchMyGroups()
     }
-  }, [user, loadUserSettings])
+  }, [user, loadUserSettings, fetchRecentMatches, fetchMyGroups])
 
   // Manejar navegación por URL
   useEffect(() => {
@@ -343,7 +410,7 @@ export default function ProfilePage() {
                               </div>
                             )}
                           </div>
-                          <h3 className="font-semibold text-text-main text-lg">{profile?.full_name || 'Usuario'}</h3>
+                          <h3 className="font-semibold text-text-main text-lg">{getFullName(profile?.first_name, profile?.last_name) || 'Usuario'}</h3>
                           <p className="text-sm text-text-secondary mb-4">{profile?.email}</p>
                           
                           <div className="grid grid-cols-3 gap-3 text-center">

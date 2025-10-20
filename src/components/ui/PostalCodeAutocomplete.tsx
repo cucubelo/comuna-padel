@@ -61,9 +61,9 @@ export default function PostalCodeAutocomplete({
     loadCountries();
   }, [countryCode]);
 
-  // Actualizar query cuando cambia el value prop
+  // Actualizar query cuando cambia el value prop (solo si no está siendo editado)
   useEffect(() => {
-    if (value !== query) {
+    if (value !== query && !inputRef.current?.matches(':focus')) {
       setQuery(value);
     }
   }, [value, query]);

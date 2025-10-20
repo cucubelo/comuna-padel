@@ -8,6 +8,8 @@ import {
   type AccessRequestWithProfile 
 } from '@/lib/group-access-requests'
 import { useAuth } from '@/contexts/AuthContext'
+import { useToast } from '@/contexts/ToastContext'
+import { getFullName } from '@/lib/utils'
 
 interface AccessRequestsModalProps {
   groupId: string
@@ -23,6 +25,7 @@ export default function AccessRequestsModal({
   onClose 
 }: AccessRequestsModalProps) {
   const { user } = useAuth()
+  const { showSuccess, showError } = useToast()
   const [requests, setRequests] = useState<AccessRequestWithProfile[]>([])
   const [loading, setLoading] = useState(false)
   const [processingRequest, setProcessingRequest] = useState<string | null>(null)
@@ -56,14 +59,14 @@ export default function AccessRequestsModal({
     try {
       const { error } = await approveAccessRequest(requestId, user.id)
       if (error) {
-        alert(`Error: ${error}`)
+        showError(`Error: ${error}`)
       } else {
-        alert('Solicitud aprobada correctamente')
+        showSuccess('Solicitud aprobada correctamente')
         fetchRequests() // Refrescar la lista
       }
     } catch (error) {
       console.error('Error approving request:', error)
-      alert('Error al aprobar la solicitud')
+      showError('Error al aprobar la solicitud')
     } finally {
       setProcessingRequest(null)
     }
@@ -76,14 +79,14 @@ export default function AccessRequestsModal({
     try {
       const { error } = await rejectAccessRequest(requestId, user.id)
       if (error) {
-        alert(`Error: ${error}`)
+        showError(`Error: ${error}`)
       } else {
-        alert('Solicitud rechazada')
+        showSuccess('Solicitud rechazada')
         fetchRequests() // Refrescar la lista
       }
     } catch (error) {
       console.error('Error rejecting request:', error)
-      alert('Error al rechazar la solicitud')
+      showError('Error al rechazar la solicitud')
     } finally {
       setProcessingRequest(null)
     }
@@ -126,21 +129,31 @@ export default function AccessRequestsModal({
           ) : (
             <div className="space-y-4">
               {requests.map((request) => (
-                <div key={request.id} className="border border-border rounded-lg p-4">
+                <div key={request.id} className="bg-bg-secondary/60 border border-border rounded-xl p-4 hover:bg-bg-secondary transition-colors">
                   <div className="flex items-start justify-between">
                     <div className="flex items-center space-x-3">
-                      <div className="w-10 h-10 bg-accent-primary/10 rounded-full flex items-center justify-center">
-                        <svg className="w-5 h-5 text-accent-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                        </svg>
-                      </div>
+                      {request.profiles?.avatar_url ? (
+                        <img
+                          src={request.profiles.avatar_url}
+                          alt={getFullName(request.profiles?.first_name, request.profiles?.last_name) || 'Usuario'}
+                          className="w-10 h-10 rounded-full object-cover border border-border"
+                        />
+                      ) : (
+                        <div className="w-10 h-10 bg-bg-main border border-border rounded-full flex items-center justify-center">
+                          <svg className="w-5 h-5 text-text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                          </svg>
+                        </div>
+                      )}
                       <div>
                         <h3 className="font-medium text-text-main">
-                          {request.profiles?.full_name || 'Usuario'}
+                          {getFullName(request.profiles?.first_name, request.profiles?.last_name) || 'Usuario'}
                         </h3>
                         <div className="text-sm text-text-secondary space-y-1">
                           {request.profiles?.skill_level && (
-                            <p>Nivel: {request.profiles.skill_level}/10</p>
+                            <p>
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-border text-text-secondary text-xs">Nivel: {request.profiles.skill_level}/10</span>
+                            </p>
                           )}
                           {(request.profiles?.city || request.profiles?.country) && (
                             <p>
@@ -158,14 +171,16 @@ export default function AccessRequestsModal({
                       <button
                         onClick={() => handleApprove(request.id)}
                         disabled={processingRequest === request.id}
-                        className="px-3 py-1.5 bg-green-100 hover:bg-green-200 text-green-700 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                        className="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 bg-accent-primary/20 text-accent-primary hover:bg-accent-primary/30 border border-accent-primary/30"
+                        aria-label="Aprobar solicitud"
                       >
                         {processingRequest === request.id ? 'Procesando...' : 'Aprobar'}
                       </button>
                       <button
                         onClick={() => handleReject(request.id)}
                         disabled={processingRequest === request.id}
-                        className="px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                        className="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 bg-bg-secondary text-text-main hover:bg-border border border-border"
+                        aria-label="Rechazar solicitud"
                       >
                         {processingRequest === request.id ? 'Procesando...' : 'Rechazar'}
                       </button>
