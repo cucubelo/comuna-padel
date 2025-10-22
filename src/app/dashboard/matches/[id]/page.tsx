@@ -21,7 +21,10 @@ import {
   GroupMemberForInvitation,
   getPendingInvitationsByMatch,
   getPendingInvitationsWithProfiles,
+  respondToInvitation,
+  getPendingInvitations,
 } from "@/lib/matchInvitations";
+import { notificationService } from "@/lib/services/notificationService";
 
 interface MatchParticipant extends Tables<"match_participants"> {
   profiles: Tables<"profiles"> | null;
@@ -59,6 +62,7 @@ export default function MatchDetailsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [userStatus, setUserStatus] = useState<string | null>(null);
+  const [userParticipant, setUserParticipant] = useState<MatchParticipant | null>(null);
   const [savingResults, setSavingResults] = useState(false);
 
   // Estados para diálogos de confirmación
@@ -119,8 +123,53 @@ export default function MatchDetailsPage() {
   const [pendingInvitations, setPendingInvitations] = useState<string[]>([]);
   const [pendingInvitationsWithProfiles, setPendingInvitationsWithProfiles] = useState<GroupMemberForInvitation[]>([]);
 
+  // Estados para control de acceso y invitaciones del usuario
+  const [userInvitation, setUserInvitation] = useState<any>(null);
+  const [hasAccess, setHasAccess] = useState<boolean>(false);
+  const [accessLoading, setAccessLoading] = useState<boolean>(true);
+  const [respondingToInvitation, setRespondingToInvitation] = useState<boolean>(false);
+
   useEffect(() => {
-    if (matchId) {
+    if (matchId && user) {
+      checkUserAccess();
+
+      // Suscripción específica para invitaciones del usuario actual
+      // Esta suscripción funciona independientemente del acceso inicial
+      const userInvitationsSubscription = supabase
+        .channel(`user_invitations_${matchId}_${user.id}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "match_invitations",
+            filter: `match_id=eq.${matchId}`,
+          },
+          (payload) => {
+            console.log("Cambio en invitaciones del usuario:", payload);
+            // Si es una nueva invitación para este usuario, re-verificar acceso
+            if (payload.eventType === "INSERT" && payload.new && payload.new.invitee_id === user.id) {
+              console.log("Nueva invitación recibida, re-verificando acceso...");
+              checkUserAccess();
+            }
+            // Si se actualiza o elimina una invitación del usuario, re-verificar acceso
+            if ((payload.eventType === "UPDATE" || payload.eventType === "DELETE") && 
+                payload.old && payload.old.invitee_id === user.id) {
+              console.log("Invitación actualizada/eliminada, re-verificando acceso...");
+              checkUserAccess();
+            }
+          }
+        )
+        .subscribe();
+
+      return () => {
+        userInvitationsSubscription.unsubscribe();
+      };
+    }
+  }, [matchId, user]);
+
+  useEffect(() => {
+    if (matchId && hasAccess) {
       fetchMatchDetails();
 
       // Suscripción en tiempo real para cambios en participantes
@@ -138,6 +187,11 @@ export default function MatchDetailsPage() {
             console.log("Cambio en participantes:", payload);
             // Recargar los detalles del partido cuando hay cambios
             fetchMatchDetails();
+            
+            // Si es una nueva inserción (usuario aceptó invitación), también actualizar invitaciones pendientes
+            if (payload.eventType === "INSERT" && match?.group_id) {
+              loadPendingInvitations(matchId);
+            }
           }
         )
         .subscribe();
@@ -178,6 +232,15 @@ export default function MatchDetailsPage() {
             if (match?.group_id) {
               loadPendingInvitations(matchId);
             }
+            // Verificar si el usuario tiene una nueva invitación
+            if (payload.eventType === "INSERT" && payload.new && payload.new.invitee_id === user?.id) {
+              checkUserAccess(); // Re-verificar acceso cuando hay nueva invitación
+            }
+            // Si se actualiza el estado de una invitación (aceptada/rechazada), recargar participantes
+            if (payload.eventType === "UPDATE" && payload.new) {
+              console.log("Invitación actualizada, recargando detalles del partido...");
+              fetchMatchDetails();
+            }
             // Mostrar notificación si se envió una nueva invitación
             if (payload.eventType === "INSERT" && payload.new) {
               showSuccess("Nueva invitación enviada");
@@ -193,7 +256,47 @@ export default function MatchDetailsPage() {
         invitationsSubscription.unsubscribe();
       };
     }
-  }, [matchId, user]);
+  }, [matchId, hasAccess, match?.group_id, user?.id]);
+
+  // Efecto para manejar actualizaciones automáticas cuando el tiempo del partido expira
+  useEffect(() => {
+    if (!match || !match.scheduled_at) return;
+
+    const matchTime = new Date(match.scheduled_at);
+    const now = new Date();
+    
+    // Si el partido ya expiró, no necesitamos configurar un timer
+    if (now > matchTime) return;
+
+    // Calcular cuánto tiempo falta para que expire el partido
+    const timeUntilExpiry = matchTime.getTime() - now.getTime();
+    
+    // Configurar un timeout para actualizar la UI cuando expire el partido
+    const timeoutId = setTimeout(() => {
+      console.log('Match time expired, refreshing UI...');
+      fetchMatchDetails(); // Recargar los detalles del partido
+    }, timeUntilExpiry);
+
+    // También configurar un intervalo para verificar periódicamente (cada minuto)
+    // en caso de que el usuario tenga la página abierta por mucho tiempo
+    const intervalId = setInterval(() => {
+      const currentTime = new Date();
+      const matchDateTime = new Date(match.scheduled_at);
+      
+      // Si el partido acaba de expirar, actualizar la UI
+      if (currentTime > matchDateTime) {
+        console.log('Match time expired (interval check), refreshing UI...');
+        fetchMatchDetails();
+        clearInterval(intervalId); // Limpiar el intervalo una vez que expire
+      }
+    }, 60000); // Verificar cada minuto
+
+    // Cleanup function
+    return () => {
+      clearTimeout(timeoutId);
+      clearInterval(intervalId);
+    };
+  }, [match?.scheduled_at]);
 
   // Inicializar formulario de edición cuando se carga el partido
   useEffect(() => {
@@ -320,6 +423,7 @@ export default function MatchDetailsPage() {
           (p) => p.user_id === user.id
         );
         setUserStatus(userParticipant?.status || null);
+        setUserParticipant(userParticipant || null);
       }
 
       // Cargar invitaciones pendientes automáticamente
@@ -341,6 +445,125 @@ export default function MatchDetailsPage() {
       setPendingInvitationsWithProfiles(pendingInvitationsWithProfiles);
     } catch (error) {
       console.error("Error loading pending invitations:", error);
+    }
+  };
+
+  // Función para verificar el acceso del usuario al partido
+  const checkUserAccess = async () => {
+    if (!user || !matchId) return;
+
+    try {
+      setAccessLoading(true);
+
+      // Obtener información del partido
+      const { data: matchData, error: matchError } = await supabase
+        .from("matches")
+        .select("id, is_public, creator_id")
+        .eq("id", matchId)
+        .single();
+
+      if (matchError) {
+        throw matchError;
+      }
+
+      // Si el partido es público, permitir acceso
+      if (matchData.is_public) {
+        setHasAccess(true);
+        setAccessLoading(false);
+        return;
+      }
+
+      // Si el usuario es el creador del partido, permitir acceso
+      if (matchData.creator_id === user.id) {
+        setHasAccess(true);
+        setAccessLoading(false);
+        return;
+      }
+
+      // Verificar si el usuario ya es participante
+      const { data: participantData } = await supabase
+        .from("match_participants")
+        .select("status")
+        .eq("match_id", matchId)
+        .eq("user_id", user.id)
+        .single();
+
+      if (participantData) {
+        setHasAccess(true);
+        setAccessLoading(false);
+        return;
+      }
+
+      // Verificar si el usuario tiene una invitación pendiente
+      const { data: invitationData } = await supabase
+        .from("match_invitations")
+        .select("*")
+        .eq("match_id", matchId)
+        .eq("invitee_id", user.id)
+        .eq("status", "pending")
+        .gt("expires_at", new Date().toISOString())
+        .single();
+
+      if (invitationData) {
+        setUserInvitation(invitationData);
+        setHasAccess(true);
+        setAccessLoading(false);
+        return;
+      }
+
+      // Si llegamos aquí, el usuario no tiene acceso
+      setHasAccess(false);
+      setAccessLoading(false);
+    } catch (error) {
+      console.error("Error checking user access:", error);
+      setHasAccess(false);
+      setAccessLoading(false);
+    }
+  };
+
+  // Función para responder a una invitación
+  const handleInvitationResponse = async (response: 'accepted' | 'declined') => {
+    if (!userInvitation || !user) return;
+
+    try {
+      setRespondingToInvitation(true);
+      
+      await respondToInvitation(userInvitation.id, response);
+      
+      // Buscar y marcar como leída la notificación relacionada
+      try {
+        const { data: notifications } = await supabase
+          .from('notifications')
+          .select('id')
+          .eq('recipient_id', user.id)
+          .eq('type', 'match_invitation')
+          .eq('data->>matchId', matchId)
+          .eq('is_read', false);
+
+        if (notifications && notifications.length > 0) {
+          for (const notification of notifications) {
+            await notificationService.markAsRead(notification.id);
+          }
+        }
+      } catch (notificationError) {
+        console.error('Error marking notification as read:', notificationError);
+      }
+
+      if (response === 'accepted') {
+        showSuccess("¡Invitación aceptada! Te has unido al partido.");
+      } else {
+        showSuccess("Invitación rechazada.");
+      }
+
+      // Recargar los datos del partido
+      setUserInvitation(null);
+      await fetchMatchDetails();
+      await checkUserAccess();
+    } catch (error) {
+      console.error("Error responding to invitation:", error);
+      showError("Error al responder a la invitación");
+    } finally {
+      setRespondingToInvitation(false);
     }
   };
 
@@ -623,22 +846,6 @@ export default function MatchDetailsPage() {
   };
 
   // Función para obtener dirección desde coordenadas
-  const getAddressFromCoordinates = async (lat: number, lng: number) => {
-    try {
-      const response = await fetch(
-        `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}`
-      );
-      const data = await response.json();
-
-      if (data.results && data.results.length > 0) {
-        return data.results[0].formatted_address;
-      }
-      return null;
-    } catch (error) {
-      console.error("Error al obtener dirección:", error);
-      return null;
-    }
-  };
 
   // Función para abrir en Google Maps
   const openInGoogleMaps = () => {
@@ -776,6 +983,37 @@ export default function MatchDetailsPage() {
 
       // Actualizar el estado local
       await fetchMatchDetails();
+
+      // Verificar si ahora hay exactamente 4 jugadores para cerrar automáticamente
+      const updatedMatch = await supabase
+        .from("matches")
+        .select(`
+          *,
+          match_participants!inner(
+            id,
+            user_id,
+            status,
+            team_number,
+            profiles!inner(
+              id,
+              first_name,
+              last_name,
+              avatar_url
+            )
+          )
+        `)
+        .eq("id", match.id)
+        .single();
+
+      if (updatedMatch.data) {
+        const confirmedParticipants = updatedMatch.data.match_participants.filter(
+          (p) => p.status === "confirmed"
+        );
+
+        if (confirmedParticipants.length === 4 && updatedMatch.data.status === "scheduled") {
+          await handleAutoCloseMatch();
+        }
+      }
     } catch (err) {
       console.error("Error joining match:", err);
       showError("Error al unirse al partido");
@@ -794,7 +1032,13 @@ export default function MatchDetailsPage() {
 
       if (error) throw error;
 
-      // Actualizar el estado local
+      // Si es un partido privado, redirigir a la página de partidos
+      if (match.visibility === "private") {
+        router.push("/dashboard/matches");
+        return;
+      }
+
+      // Actualizar el estado local solo para partidos públicos
       await fetchMatchDetails();
     } catch (err) {
       console.error("Error leaving match:", err);
@@ -864,6 +1108,44 @@ export default function MatchDetailsPage() {
     }
   };
 
+  // Función para cerrar partida automáticamente cuando hay exactamente 4 jugadores
+  const handleAutoCloseMatch = async () => {
+    if (!user || !match || match.creator_id !== user.id) return;
+
+    const confirmedParticipants = match.match_participants.filter(
+      (p) => p.status === "confirmed"
+    );
+
+    // Solo cerrar automáticamente si hay exactamente 4 jugadores
+    if (confirmedParticipants.length === 4) {
+      try {
+        const { error } = await supabase
+          .from("matches")
+          .update({ status: "confirmed" })
+          .eq("id", match.id);
+
+        if (error) throw error;
+
+        // Actualizar el estado local
+        await fetchMatchDetails();
+        showSuccess("Partida cerrada automáticamente con 4 jugadores confirmados.");
+      } catch (err) {
+        console.error("Error closing match:", err);
+        showError("Error al cerrar la partida automáticamente");
+      }
+    }
+  };
+
+  // Verificar si el partido ha pasado su tiempo programado
+  const isMatchTimeExpired = () => {
+    if (!match) return false;
+    const matchTime = new Date(match.scheduled_at);
+    const now = new Date();
+    const isExpired = now > matchTime;
+    
+    return isExpired;
+  };
+
   const formatDate = (date: Date) => {
     return date.toLocaleDateString("es-ES", {
       weekday: "long",
@@ -873,9 +1155,6 @@ export default function MatchDetailsPage() {
     });
   };
 
-  const formatTime = (timeString: string) => {
-    return timeString;
-  };
 
   // Parse match data for display in user's timezone
   const userTimezone = getUserTimezone();
@@ -935,9 +1214,11 @@ export default function MatchDetailsPage() {
 
   const isExpired = match ? new Date(match.scheduled_at) < new Date() : false;
   const canJoin = match?.status === "scheduled" && !isExpired && !userStatus;
-  const canLeave = userStatus === "confirmed" && match?.status === "scheduled";
+  const canLeave = userStatus === "confirmed" && match?.status === "scheduled" && !isMatchTimeExpired();
   const canCancel =
     match?.creator_id === user?.id && match?.status === "scheduled";
+  const canRemovePlayer = 
+    match?.creator_id === user?.id && match?.status === "scheduled" && !isMatchTimeExpired();
   const isCreator = match?.creator_id === user?.id;
 
   // Función para formar equipos automáticamente
@@ -959,6 +1240,53 @@ export default function MatchDetailsPage() {
       unassigned: shuffled.slice(4),
     });
   };
+
+  // Verificar si el partido realmente se jugó (tiene participantes confirmados)
+  const confirmedParticipants = match?.match_participants.filter((p) => p.status === "confirmed") || [];
+  const matchWasPlayed = confirmedParticipants.length >= 2; // Al menos 2 jugadores confirmados
+
+  // Mostrar loading mientras se verifica el acceso
+  if (accessLoading) {
+    return (
+      <ProtectedRoute>
+        <div className="min-h-screen bg-bg-secondary flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-accent-primary mx-auto mb-4"></div>
+            <p className="text-text-secondary">Verificando acceso al partido...</p>
+          </div>
+        </div>
+      </ProtectedRoute>
+    );
+  }
+
+  // Mostrar mensaje de acceso denegado
+  if (!hasAccess) {
+    return (
+      <ProtectedRoute>
+        <div className="min-h-screen bg-bg-secondary flex items-center justify-center">
+          <div className="max-w-md mx-auto text-center bg-bg-main rounded-lg shadow-md p-8">
+            <div className="w-16 h-16 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center">
+              <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+              </svg>
+            </div>
+            <h2 className="text-xl font-semibold text-text-main mb-2">
+              Acceso Restringido
+            </h2>
+            <p className="text-text-secondary mb-6">
+              Este es un partido privado. Solo puedes acceder si has sido invitado o ya eres participante.
+            </p>
+            <button
+              onClick={() => router.push('/dashboard/matches')}
+              className="bg-accent-primary text-bg-main px-6 py-2 rounded-lg hover:bg-accent-primary/90 transition-colors"
+            >
+              Volver a Partidos
+            </button>
+          </div>
+        </div>
+      </ProtectedRoute>
+    );
+  }
 
   if (loading) {
     return (
@@ -1003,16 +1331,16 @@ export default function MatchDetailsPage() {
 
   return (
     <ProtectedRoute>
-      <div className="min-h-screen bg-bg-secondary p-4 sm:p-6 lg:p-8">
+      <div className="min-h-screen bg-bg-secondary p-2 sm:p-4 lg:p-6 xl:p-8">
         <div className="max-w-4xl mx-auto">
           {/* Header */}
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center justify-between mb-4 sm:mb-6">
             <button
               onClick={() => router.back()}
-              className="flex items-center text-text-secondary hover:text-text-main transition-colors"
+              className="flex items-center text-text-secondary hover:text-text-main transition-colors text-sm sm:text-base"
             >
               <svg
-                className="h-5 w-5 mr-2"
+                className="h-4 w-4 sm:h-5 sm:w-5 mr-1 sm:mr-2"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -1028,29 +1356,66 @@ export default function MatchDetailsPage() {
             </button>
 
             {isCreator && (
-              <span className="px-3 py-1 text-sm font-medium bg-accent-primary/10 text-accent-primary rounded-full border border-accent-primary/20">
+              <span className="px-2 py-1 sm:px-3 sm:py-1 text-xs sm:text-sm font-medium bg-accent-primary/10 text-accent-primary rounded-full border border-accent-primary/20">
                 Creador
               </span>
             )}
           </div>
 
+          {/* Mostrar controles de invitación si el usuario tiene una invitación pendiente */}
+          {userInvitation && (
+            <div className="mb-6 bg-bg-main border border-border rounded-lg p-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <div className="w-10 h-10 bg-accent-primary/20 rounded-full flex items-center justify-center mr-4">
+                    <Mail className="w-5 h-5 text-accent-primary" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-text-main font-montserrat">
+                      Invitación al Partido
+                    </h3>
+                    <p className="text-text-secondary font-open-sans">
+                      Has sido invitado a participar en este partido privado.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex space-x-3">
+                  <button
+                    onClick={() => handleInvitationResponse('declined')}
+                    disabled={respondingToInvitation}
+                    className="px-4 py-2 border border-border rounded-lg text-text-secondary hover:bg-bg-secondary transition-colors disabled:opacity-50 font-open-sans"
+                  >
+                    {respondingToInvitation ? 'Procesando...' : 'Rechazar'}
+                  </button>
+                  <button
+                    onClick={() => handleInvitationResponse('accepted')}
+                    disabled={respondingToInvitation}
+                    className="px-4 py-2 bg-accent-primary text-black rounded-lg hover:bg-accent-primary/90 transition-colors disabled:opacity-50 font-open-sans font-medium"
+                  >
+                    {respondingToInvitation ? 'Procesando...' : 'Aceptar'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Match Info Card */}
-          <div className="bg-bg-main rounded-lg p-6 mb-6 border border-border">
-            <div className="flex items-start justify-between mb-4">
-              <div>
-                <h1 className="text-2xl font-bold text-text-main font-montserrat mb-2">
+          <div className="bg-bg-main rounded-lg p-3 sm:p-4 lg:p-6 mb-4 sm:mb-6 border border-border">
+            <div className="flex flex-col sm:flex-row sm:items-start justify-between mb-4 gap-3 sm:gap-0">
+              <div className="flex-1">
+                <h1 className="text-lg sm:text-xl lg:text-2xl font-bold text-text-main font-montserrat mb-2">
                   Partido {match.is_public ? "Público" : "Privado"}
                 </h1>
                 {match.groups && (
-                  <p className="text-text-secondary font-open-sans">
+                  <p className="text-sm sm:text-base text-text-secondary font-open-sans">
                     Grupo: {match.groups.name}
                   </p>
                 )}
               </div>
 
-              <div className="flex items-center gap-3">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3">
                 <span
-                  className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border ${getStatusColor(
+                  className={`inline-flex items-center px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-medium border ${getStatusColor(
                     match.status
                   )}`}
                 >
@@ -1064,10 +1429,10 @@ export default function MatchDetailsPage() {
                   !isEditingMatch && (
                     <button
                       onClick={() => setIsEditingMatch(true)}
-                      className="px-3 py-1.5 bg-accent-primary text-black rounded-lg font-medium hover:bg-accent-primary/90 transition-colors flex items-center gap-2 text-sm"
+                      className="px-2 sm:px-3 py-1 sm:py-1.5 bg-accent-primary text-black rounded-lg font-medium hover:bg-accent-primary/90 transition-colors flex items-center gap-1 sm:gap-2 text-xs sm:text-sm w-full sm:w-auto justify-center"
                     >
                       <svg
-                        className="h-4 w-4"
+                        className="h-3 w-3 sm:h-4 sm:w-4"
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
@@ -1086,10 +1451,10 @@ export default function MatchDetailsPage() {
             </div>
 
             {/* Date and Time */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-4 sm:mb-6">
               <div className="flex items-center">
                 <svg
-                  className="h-5 w-5 text-accent-primary mr-3"
+                  className="h-4 w-4 sm:h-5 sm:w-5 text-accent-primary mr-2 sm:mr-3 flex-shrink-0"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -1101,13 +1466,13 @@ export default function MatchDetailsPage() {
                     d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 002-2V12a2 2 0 002 2z"
                   />
                 </svg>
-                <div className="flex-1">
+                <div className="flex-1 min-w-0">
                   {!isEditingMatch ? (
                     <div>
-                      <p className="text-sm text-text-secondary font-open-sans">
+                      <p className="text-xs sm:text-sm text-text-secondary font-open-sans">
                         Fecha
                       </p>
-                      <p className="text-text-main font-medium capitalize">
+                      <p className="text-sm sm:text-base text-text-main font-medium capitalize truncate">
                         {matchTimezoneData
                           ? formatDate(matchTimezoneData.localDate)
                           : formatDate(new Date(match.scheduled_at))}
@@ -1115,7 +1480,7 @@ export default function MatchDetailsPage() {
                     </div>
                   ) : (
                     <div>
-                      <label className="block text-sm font-medium text-text-secondary mb-2">
+                      <label className="block text-xs sm:text-sm font-medium text-text-secondary mb-2">
                         Fecha y Hora
                       </label>
                       <input
@@ -1127,7 +1492,7 @@ export default function MatchDetailsPage() {
                             scheduled_at: e.target.value,
                           }))
                         }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-accent-primary"
+                        className="w-full px-2 sm:px-3 py-1.5 sm:py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-accent-primary text-sm"
                       />
                     </div>
                   )}
@@ -1136,7 +1501,7 @@ export default function MatchDetailsPage() {
 
               <div className="flex items-center">
                 <svg
-                  className="h-5 w-5 text-accent-secondary mr-3"
+                  className="h-4 w-4 sm:h-5 sm:w-5 text-accent-secondary mr-2 sm:mr-3 flex-shrink-0"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -1148,25 +1513,25 @@ export default function MatchDetailsPage() {
                     d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
                   />
                 </svg>
-                <div>
+                <div className="min-w-0">
                   {!isEditingMatch ? (
                     <div>
-                      <p className="text-sm text-text-secondary font-open-sans">
+                      <p className="text-xs sm:text-sm text-text-secondary font-open-sans">
                         Hora
                       </p>
-                      <p className="text-text-main font-medium">
+                      <p className="text-sm sm:text-base text-text-main font-medium">
                         {localTimeText}
                       </p>
                       {/* Timezone info */}
                       {timezoneInfo.isDifferent && (
                         <div className="flex items-center text-xs text-text-secondary font-open-sans mt-1">
                           <Clock className="h-3 w-3 mr-1" />
-                          <span>{timezoneInfo.displayText}</span>
+                          <span className="truncate">{timezoneInfo.displayText}</span>
                         </div>
                       )}
                     </div>
                   ) : (
-                    <div className="text-sm text-text-secondary font-open-sans">
+                    <div className="text-xs sm:text-sm text-text-secondary font-open-sans">
                       Ajusta la fecha y hora en el campo de la izquierda
                     </div>
                   )}
@@ -1178,10 +1543,10 @@ export default function MatchDetailsPage() {
             {(match.location_name ||
               match.sports_locations ||
               isEditingMatch) && (
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center flex-1">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 sm:mb-6 gap-3 sm:gap-0">
+                <div className="flex items-center flex-1 min-w-0">
                   <svg
-                    className="h-5 w-5 text-accent-secondary mr-3"
+                    className="h-4 w-4 sm:h-5 sm:w-5 text-accent-secondary mr-2 sm:mr-3 flex-shrink-0"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -1339,7 +1704,7 @@ export default function MatchDetailsPage() {
             </div>
 
             {/* Action Buttons */}
-            {!isEditingMatch && (
+            {!isEditingMatch && !userInvitation && (canJoin || canLeave || canCancel || (isCreator && match.status === "confirmed" && match.match_participants.filter((p) => p.status === "confirmed").length >= 4) || (isCreator && match.status === "completed" && match.status !== "canceled" && matchWasPlayed && !showAdvancedResults)) && (
               <div className="bg-bg-secondary rounded-lg p-4 border border-border">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-lg font-semibold text-text-main font-montserrat">
@@ -1413,6 +1778,9 @@ export default function MatchDetailsPage() {
                     </button>
                   )}
 
+                  {/* Botón para cerrar partida manualmente - ELIMINADO */}
+                  {/* La partida se cierra automáticamente cuando hay exactamente 4 jugadores */}
+
                   {/* Botón para formar equipos */}
                   {isCreator &&
                     match.status === "confirmed" &&
@@ -1431,6 +1799,8 @@ export default function MatchDetailsPage() {
                   {/* Botón para registrar resultados por sets */}
                   {isCreator &&
                     match.status === "completed" &&
+                    match.status !== "canceled" &&
+                    matchWasPlayed &&
                     !showAdvancedResults && (
                       <button
                         onClick={() => setShowAdvancedResults(true)}
@@ -1441,24 +1811,9 @@ export default function MatchDetailsPage() {
                       </button>
                     )}
 
-                  {userStatus === "confirmed" && (
-                    <span className="bg-success/10 text-success px-6 py-2 rounded-lg font-medium border border-success/20 flex items-center gap-2">
-                      <svg
-                        className="h-4 w-4"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M5 13l4 4L19 7"
-                        />
-                      </svg>
-                      Confirmado
-                    </span>
-                  )}
+
+
+                  {/* Eliminar el texto de confirmación innecesario para usuarios no creadores */}
                 </div>
               </div>
             )}
@@ -1547,7 +1902,7 @@ export default function MatchDetailsPage() {
           </div>
 
           {/* Registro de Resultados por Sets */}
-          {showAdvancedResults && isCreator && match.status === "completed" && (
+          {showAdvancedResults && isCreator && match.status === "completed" && match.status !== "canceled" && matchWasPlayed && (
             <div className="bg-bg-main rounded-lg p-6 mb-6 border border-border">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-xl font-bold text-text-main font-montserrat">
@@ -1598,6 +1953,9 @@ export default function MatchDetailsPage() {
                           <span className="text-text-main text-sm">
                             {participant.profiles?.first_name}{" "}
                             {participant.profiles?.last_name}
+                            {participant.user_id === user?.id && (
+                              <span className="text-text-secondary"> (Tú)</span>
+                            )}
                           </span>
                         </div>
                       ))}
@@ -1639,6 +1997,9 @@ export default function MatchDetailsPage() {
                           <span className="text-text-main text-sm">
                             {participant.profiles?.first_name}{" "}
                             {participant.profiles?.last_name}
+                            {participant.user_id === user?.id && (
+                              <span className="text-text-secondary"> (Tú)</span>
+                            )}
                           </span>
                         </div>
                       ))}
@@ -1683,6 +2044,9 @@ export default function MatchDetailsPage() {
                           <span className="text-text-main text-sm">
                             {participant.profiles?.first_name}{" "}
                             {participant.profiles?.last_name}
+                            {participant.user_id === user?.id && (
+                              <span className="text-text-secondary"> (Tú)</span>
+                            )}
                           </span>
                         </div>
                       ))}
@@ -1700,23 +2064,7 @@ export default function MatchDetailsPage() {
             </div>
           )}
 
-          {/* Registro de resultados por sets */}
-          {isCreator && match.status === "scheduled" && !showAdvancedResults && (
-            <div className="bg-bg-main rounded-lg p-6 mb-6 border border-border">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold text-text-main font-montserrat">
-                  Registrar Resultados
-                </h2>
-              </div>
 
-              <button
-                onClick={() => setShowAdvancedResults(true)}
-                className="w-full bg-accent-primary text-black px-4 py-2 rounded-lg font-medium hover:bg-accent-primary/90 transition-colors mb-4"
-              >
-                Registrar Resultados
-              </button>
-            </div>
-          )}
 
           {/* Formulario de resultados por sets */}
           {showAdvancedResults && (
@@ -1927,6 +2275,9 @@ export default function MatchDetailsPage() {
                           <p className="text-text-main font-medium text-sm">
                             {participant.profiles?.first_name}{" "}
                             {participant.profiles?.last_name}
+                            {participant.user_id === user?.id && (
+                              <span className="text-text-secondary"> (Tú)</span>
+                            )}
                           </p>
                         </div>
                       </div>
@@ -1971,6 +2322,9 @@ export default function MatchDetailsPage() {
                           <p className="text-text-main font-medium text-sm">
                             {participant.profiles?.first_name}{" "}
                             {participant.profiles?.last_name}
+                            {participant.user_id === user?.id && (
+                              <span className="text-text-secondary"> (Tú)</span>
+                            )}
                           </p>
                         </div>
                       </div>
@@ -2149,15 +2503,18 @@ export default function MatchDetailsPage() {
                         <p className="text-text-main font-medium">
                           {participant.profiles?.first_name}{" "}
                           {participant.profiles?.last_name}
+                          {participant.user_id === user?.id && (
+                            <span className="text-text-secondary"> (Tú)</span>
+                          )}
                         </p>
                         {participant.user_id === match.creator_id && (
                           <p className="text-xs text-accent-primary">
-                            Organizador
+                            Organizador{participant.user_id === user?.id ? "" : ""}
                           </p>
                         )}
                       </div>
                       {/* Botón de expulsión para el creador */}
-                      {isCreator &&
+                      {canRemovePlayer &&
                         participant.user_id !== match.creator_id && (
                           <button
                             onClick={() =>
@@ -2179,8 +2536,10 @@ export default function MatchDetailsPage() {
             )}
           </div>
 
-          {/* Invitaciones Pendientes */}
-          {pendingInvitationsWithProfiles.length > 0 && (
+          {/* Invitaciones Pendientes - Visible para el creador y participantes que fueron invitados */}
+          {pendingInvitationsWithProfiles.length > 0 && 
+           (match?.creator_id === user?.id || 
+            (userParticipant && match?.visibility === "private")) && (
             <div className="bg-bg-main rounded-lg p-6 mb-6 border border-border">
               <h2 className="text-xl font-bold text-text-main font-montserrat mb-4 flex items-center">
                 <Mail className="mr-2" size={20} />

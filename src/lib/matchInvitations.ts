@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { notificationService } from '@/lib/services/notificationService'
 
 export interface MatchInvitation {
   id: string
@@ -32,39 +33,54 @@ export interface GroupMemberForInvitation {
   last_name: string | null
   avatar_url: string | null
   skill_level: number | null
+  username: string | null
+  email: string | null
 }
 
 // Obtener miembros del grupo para invitar (excluyendo al creador)
 export async function getGroupMembersForInvitation(groupId: string, creatorId: string): Promise<GroupMemberForInvitation[]> {
-  const { data, error } = await supabase
-    .from('group_members')
-    .select(`
-      user_id,
-      profiles!group_members_user_id_fkey (
-        first_name,
-        last_name,
-        avatar_url,
-        skill_level
-      )
-    `)
-    .eq('group_id', groupId)
-    .neq('user_id', creatorId)
+  try {
+    console.log('Fetching group members for group:', groupId, 'excluding creator:', creatorId)
+    
+    const { data, error } = await supabase
+      .from('group_members')
+      .select(`
+        user_id,
+        profiles (
+          first_name,
+          last_name,
+          avatar_url,
+          skill_level,
+          username
+        )
+      `)
+      .eq('group_id', groupId)
+      .neq('user_id', creatorId)
 
-  if (error) {
-    console.error('Error fetching group members for invitation:', error)
-    throw error
+    if (error) {
+      console.error('Error fetching group members for invitation:', error)
+      throw new Error(`Database error: ${error.message}`)
+    }
+
+    console.log('Raw data from query:', JSON.stringify(data, null, 2))
+
+    // Transformar los datos al formato esperado
+    const transformedData = data?.map(member => ({
+      user_id: member.user_id,
+      first_name: member.profiles?.first_name || null,
+      last_name: member.profiles?.last_name || null,
+      avatar_url: member.profiles?.avatar_url || null,
+      skill_level: member.profiles?.skill_level || null,
+      username: member.profiles?.username || null,
+      email: null // El email está en auth.users, no en profiles
+    })) || []
+
+    console.log('Transformed data:', JSON.stringify(transformedData, null, 2))
+    return transformedData
+  } catch (err) {
+    console.error('Unexpected error in getGroupMembersForInvitation:', err)
+    throw err
   }
-
-  // Transformar los datos al formato esperado
-  const transformedData = data?.map(member => ({
-    user_id: member.user_id,
-    first_name: member.profiles?.first_name || null,
-    last_name: member.profiles?.last_name || null,
-    avatar_url: member.profiles?.avatar_url || null,
-    skill_level: member.profiles?.skill_level || null
-  })) || []
-
-  return transformedData
 }
 
 // Enviar invitaciones a múltiples usuarios
@@ -103,6 +119,88 @@ export async function sendMatchInvitations(matchId: string, inviterId: string, i
         success: false,
         error: error.message || error.details || 'Error al enviar invitaciones'
       }
+    }
+
+    // Crear notificaciones para cada invitado
+    try {
+      // Obtener información del partido para las notificaciones
+      const { data: matchData, error: matchError } = await supabase
+        .from('matches')
+        .select(`
+          id,
+          scheduled_at,
+          location_name,
+          groups (
+            name
+          )
+        `)
+        .eq('id', matchId)
+        .single()
+
+      if (matchError) {
+        console.error('Error fetching match data for notifications:', matchError)
+        throw new Error(`Error fetching match data: ${matchError.message}`)
+      }
+
+      if (!matchData) {
+        console.error('No match data found for matchId:', matchId)
+        throw new Error('No match data found')
+      }
+
+      // Validar que tenemos los datos necesarios
+      if (!matchData.scheduled_at) {
+        console.error('Match data missing scheduled_at:', matchData)
+        throw new Error('Match data missing scheduled_at')
+      }
+
+      // Crear notificaciones para cada invitado
+      const notificationPromises = inviteeIds.map(async (inviteeId) => {
+        try {
+          const matchDate = new Date(matchData.scheduled_at).toLocaleDateString('es-ES', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+          })
+
+          const location = matchData.location_name || 'Ubicación no especificada'
+
+          console.log('Creating notification with data:', {
+            inviteeId,
+            inviterId,
+            matchId: matchData.id,
+            matchDate,
+            location
+          })
+
+          return await notificationService.createMatchInvitationNotification(
+            inviteeId,
+            inviterId,
+            {
+              matchId: matchData.id,
+              matchDate,
+              location
+            }
+          )
+        } catch (error) {
+          console.error(`Error creating notification for invitee ${inviteeId}:`, error)
+          throw error
+        }
+      })
+
+      await Promise.all(notificationPromises)
+      console.log(`Notificaciones creadas para ${inviteeIds.length} invitados`)
+    } catch (notificationError) {
+      console.error('Error creating notifications for invitations:', notificationError)
+      console.error('Notification error details:', {
+        matchId,
+        inviterId,
+        inviteeIds,
+        error: notificationError
+      })
+      // No fallar la función principal si las notificaciones fallan
     }
 
     return {

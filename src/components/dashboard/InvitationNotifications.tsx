@@ -4,9 +4,12 @@ import React, { useState, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/hooks/useToast'
 import { getPendingInvitations, respondToInvitation, MatchInvitation } from '@/lib/matchInvitations'
-import { Bell, Check, X, Calendar, MapPin, Users, Clock } from 'lucide-react'
+import { notificationService } from '@/lib/services/notificationService'
+import { supabase } from '@/lib/supabase'
+import { Bell, Check, X, Calendar, MapPin, Users, Clock, Eye } from 'lucide-react'
 import { parseMatchDataForDisplay, getUserTimezone } from '@/lib/utils/timezoneUtils'
 import { getTimeUntilExpiration } from '@/lib/utils/timeUtils'
+import Link from 'next/link'
 
 export default function InvitationNotifications() {
   const { user } = useAuth()
@@ -36,7 +39,38 @@ export default function InvitationNotifications() {
   const handleResponse = async (invitationId: string, response: 'accepted' | 'declined') => {
     try {
       setResponding(invitationId)
+      
+      // Primero obtener información de la invitación para encontrar el match_id
+      const { data: invitationData } = await supabase
+        .from('match_invitations')
+        .select('match_id')
+        .eq('id', invitationId)
+        .single()
+      
       await respondToInvitation(invitationId, response)
+      
+      // Buscar y marcar como leída la notificación relacionada con esta invitación
+      if (invitationData?.match_id) {
+        try {
+          const { data: notifications } = await supabase
+            .from('notifications')
+            .select('id')
+            .eq('recipient_id', user?.id)
+            .eq('type', 'match_invitation')
+            .eq('data->>matchId', invitationData.match_id)
+            .eq('is_read', false)
+
+          if (notifications && notifications.length > 0) {
+            // Marcar todas las notificaciones relacionadas como leídas
+            for (const notification of notifications) {
+              await notificationService.markAsRead(notification.id)
+            }
+          }
+        } catch (notificationError) {
+          console.error('Error marking notification as read:', notificationError)
+          // No lanzar error aquí para no interrumpir el flujo principal
+        }
+      }
       
       // Remove the invitation from the list
       setInvitations(prev => prev.filter(inv => inv.id !== invitationId))
@@ -172,23 +206,32 @@ export default function InvitationNotifications() {
                   </div>
                 </div>
 
-                <div className="flex space-x-2 ml-4">
-                  <button
-                    onClick={() => handleResponse(invitation.id, 'accepted')}
-                    disabled={responding === invitation.id}
-                    className="flex items-center space-x-1 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-open-sans"
+                <div className="flex flex-col space-y-2 ml-4">
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={() => handleResponse(invitation.id, 'accepted')}
+                      disabled={responding === invitation.id}
+                      className="flex items-center space-x-1 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-open-sans"
+                    >
+                      <Check className="w-4 h-4" />
+                      <span>Aceptar</span>
+                    </button>
+                    <button
+                      onClick={() => handleResponse(invitation.id, 'declined')}
+                      disabled={responding === invitation.id}
+                      className="flex items-center space-x-1 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-open-sans"
+                    >
+                      <X className="w-4 h-4" />
+                      <span>Rechazar</span>
+                    </button>
+                  </div>
+                  <Link
+                    href={`/dashboard/matches/${invitation.match_id}`}
+                    className="flex items-center justify-center space-x-1 px-3 py-1.5 bg-bg-secondary hover:bg-bg-secondary/80 text-text-main border border-border rounded-lg text-sm font-medium transition-colors font-open-sans"
                   >
-                    <Check className="w-4 h-4" />
-                    <span>Aceptar</span>
-                  </button>
-                  <button
-                    onClick={() => handleResponse(invitation.id, 'declined')}
-                    disabled={responding === invitation.id}
-                    className="flex items-center space-x-1 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-open-sans"
-                  >
-                    <X className="w-4 h-4" />
-                    <span>Rechazar</span>
-                  </button>
+                    <Eye className="w-4 h-4" />
+                    <span>Ver detalles</span>
+                  </Link>
                 </div>
               </div>
 

@@ -9,7 +9,7 @@ import LocationAutocomplete from '@/components/ui/LocationAutocomplete'
 import LocationInfoCard from '@/components/ui/LocationInfoCard'
 import { locationService } from '@/lib/locationService'
 import { SportsLocationResult } from '@/lib/sportsLocationService'
-import { Clock, Users, UserPlus } from 'lucide-react'
+import { Clock, Users, UserPlus, Search } from 'lucide-react'
 import { 
   getUserTimezone, 
   validateMatchDateTime, 
@@ -18,6 +18,7 @@ import {
   getTimezoneName 
 } from '@/lib/utils/timezoneUtils'
 import { getGroupMembersForInvitation, sendMatchInvitations, GroupMemberForInvitation } from '@/lib/matchInvitations'
+import { getDisplayName, getUserInitials, getPrimaryDisplayName, getSecondaryDisplayName } from '@/lib/utils/displayUtils'
 
 export interface MatchFormData {
   group_id: string
@@ -95,6 +96,7 @@ export default function CreateMatchForm() {
   const [errors, setErrors] = useState<MatchFormErrors>({})
   const [groupMembers, setGroupMembers] = useState<GroupMemberForInvitation[]>([])
   const [loadingMembers, setLoadingMembers] = useState(false)
+  const [memberSearchTerm, setMemberSearchTerm] = useState('')
 
   const fetchUserGroups = useCallback(async () => {
     if (!user?.id) return
@@ -196,6 +198,17 @@ export default function CreateMatchForm() {
 
     getGroupInfo()
   }, [formData.group_id, userGroups, user?.id])
+
+  // Filter members based on search term
+  const filteredGroupMembers = groupMembers.filter(member => {
+    if (!memberSearchTerm) return true
+    
+    const searchLower = memberSearchTerm.toLowerCase()
+    const primaryName = getPrimaryDisplayName(member).toLowerCase()
+    const secondaryName = getSecondaryDisplayName(member)?.toLowerCase() || ''
+    
+    return primaryName.includes(searchLower) || secondaryName.includes(searchLower)
+  })
 
   const handleLocationSelect = (location: SportsLocationResult | null) => {
     if (location) {
@@ -572,54 +585,81 @@ export default function CreateMatchForm() {
                     <span className="text-text-secondary text-sm font-open-sans">No hay otros miembros en este grupo</span>
                   </div>
                 ) : (
-                  <div className="space-y-2 max-h-48 overflow-y-auto bg-bg-secondary border border-border rounded-lg p-3">
-                    {groupMembers.map((member) => {
-                      const fullName = member.profiles 
-                        ? [member.profiles.first_name, member.profiles.last_name].filter(Boolean).join(' ') || 'Usuario sin nombre'
-                        : 'Usuario sin nombre'
-                      
-                      const isSelected = formData.invited_members?.includes(member.user_id) || false
-                      
-                      return (
-                        <label key={member.user_id} className="flex items-center space-x-3 p-2 hover:bg-bg-primary rounded-lg cursor-pointer transition-colors">
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={(e) => {
-                              const userId = member.user_id
-                              setFormData(prev => ({
-                                ...prev,
-                                invited_members: e.target.checked
-                                  ? [...(prev.invited_members || []), userId]
-                                  : (prev.invited_members || []).filter(id => id !== userId)
-                              }))
-                            }}
-                            className="w-4 h-4 text-accent-primary bg-bg-primary border-border rounded focus:ring-accent-primary focus:ring-2"
-                          />
-                          <div className="flex items-center space-x-2 flex-1">
-                            {member.profiles?.avatar_url ? (
-                              <img
-                                src={member.profiles.avatar_url}
-                                alt={fullName}
-                                className="w-6 h-6 rounded-full object-cover"
+                  <div className="bg-bg-secondary border border-border rounded-lg">
+                    {/* Search bar */}
+                    <div className="p-3 border-b border-border">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-text-secondary" />
+                        <input
+                          type="text"
+                          placeholder="Buscar miembros..."
+                          value={memberSearchTerm}
+                          onChange={(e) => setMemberSearchTerm(e.target.value)}
+                          className="w-full pl-10 pr-3 py-2 bg-bg-primary border border-border rounded-lg text-text-main placeholder-text-secondary focus:outline-none focus:ring-2 focus:ring-accent-primary focus:border-accent-primary font-open-sans text-sm"
+                        />
+                      </div>
+                    </div>
+                    
+                    {/* Members list with scroll */}
+                    <div className="space-y-2 max-h-64 overflow-y-auto p-3">
+                      {filteredGroupMembers.length === 0 ? (
+                        <div className="flex items-center justify-center py-4">
+                          <span className="text-text-secondary text-sm font-open-sans">No se encontraron miembros</span>
+                        </div>
+                      ) : (
+                        filteredGroupMembers.map((member) => {
+                          const primaryName = getPrimaryDisplayName(member)
+                          const secondaryName = getSecondaryDisplayName(member)
+                          const initials = getUserInitials(member)
+                          const isSelected = formData.invited_members?.includes(member.user_id) || false
+                          
+                          return (
+                            <label key={member.user_id} className="flex items-center space-x-3 p-2 hover:bg-bg-primary rounded-lg cursor-pointer transition-colors">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={(e) => {
+                                  const userId = member.user_id
+                                  setFormData(prev => ({
+                                    ...prev,
+                                    invited_members: e.target.checked
+                                      ? [...(prev.invited_members || []), userId]
+                                      : (prev.invited_members || []).filter(id => id !== userId)
+                                  }))
+                                }}
+                                className="w-4 h-4 text-accent-primary bg-bg-primary border-border rounded focus:ring-accent-primary focus:ring-2"
                               />
-                            ) : (
-                              <div className="w-6 h-6 rounded-full bg-accent-primary/20 flex items-center justify-center">
-                                <span className="text-xs font-medium text-accent-primary">
-                                  {fullName.charAt(0).toUpperCase()}
-                                </span>
+                              <div className="flex items-center space-x-2 flex-1">
+                                {member.avatar_url ? (
+                                  <img
+                                    src={member.avatar_url}
+                                    alt={primaryName}
+                                    className="w-6 h-6 rounded-full object-cover"
+                                  />
+                                ) : (
+                                  <div className="w-6 h-6 rounded-full bg-accent-primary/20 flex items-center justify-center">
+                                    <span className="text-xs font-medium text-accent-primary">
+                                      {initials}
+                                    </span>
+                                  </div>
+                                )}
+                                <div className="flex-1">
+                                  <div className="text-text-main text-sm font-open-sans font-medium">{primaryName}</div>
+                                  {secondaryName && (
+                                    <div className="text-text-secondary text-xs font-open-sans">{secondaryName}</div>
+                                  )}
+                                </div>
+                                {member.skill_level && (
+                                  <span className="text-xs text-text-secondary">
+                                    {'⭐'.repeat(member.skill_level)}
+                                  </span>
+                                )}
                               </div>
-                            )}
-                            <span className="text-text-main text-sm font-open-sans">{fullName}</span>
-                            {member.profiles?.skill_level && (
-                              <span className="text-xs text-text-secondary">
-                                {'⭐'.repeat(member.profiles.skill_level)}
-                              </span>
-                            )}
-                          </div>
-                        </label>
-                      )
-                    })}
+                            </label>
+                          )
+                        })
+                      )}
+                    </div>
                   </div>
                 )}
                 

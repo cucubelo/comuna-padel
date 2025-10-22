@@ -9,6 +9,7 @@ import { usePathname } from 'next/navigation'
 import LogoutButton from '@/components/dashboard/LogoutButton'
 import SessionDebugger from '@/components/dashboard/SessionDebugger'
 import { getFullName } from '@/lib/utils'
+import NotificationCenter from '@/components/dashboard/NotificationCenter'
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { user, profile, isLoading } = useAuthQuery()
@@ -73,11 +74,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <Link href="/dashboard/stats" className={`${isActive('/dashboard/stats') ? 'text-text-main font-semibold' : 'text-text-secondary hover:text-text-main'} font-open-sans`}>Estadísticas</Link>
             </nav>
 
-            {/* Actions: Create group + Avatar + Logout + Mobile menu toggle */}
+            {/* Actions: Create group + Notifications + Avatar + Logout + Mobile menu toggle */}
             <div className="flex items-center gap-4">
               <Link href="/dashboard/groups/create" className="bg-accent-primary text-bg-main px-4 py-2 rounded-md hover:bg-accent-primary/90 transition-colors font-semibold font-open-sans hidden sm:inline-block">
                 Crear Grupo
               </Link>
+              <NotificationCenter />
               <Link href="/dashboard/profile" className="flex items-center gap-2">
                 <div className="h-9 w-9 rounded-full overflow-hidden border border-border bg-bg-secondary">
                   {avatarUrl ? (

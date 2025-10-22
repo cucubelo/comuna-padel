@@ -297,41 +297,41 @@ export default function CreateMatchModal({ isOpen, onClose, onSubmit, userId }: 
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-bg-main rounded-lg shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+      <div className="bg-bg-main rounded-lg shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto mx-2 sm:mx-0">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-border">
-          <h2 className="text-xl font-semibold text-text-main font-montserrat">
+        <div className="flex items-center justify-between p-3 sm:p-4 lg:p-6 border-b border-border">
+          <h2 className="text-lg sm:text-xl font-semibold text-text-main font-montserrat">
             Crear Nuevo Partido
           </h2>
           <button
             onClick={onClose}
-            className="text-text-secondary hover:text-text-main transition-colors"
+            className="text-text-secondary hover:text-text-main transition-colors p-1"
           >
-            <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="h-5 w-5 sm:h-6 sm:w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="p-3 sm:p-4 lg:p-6 space-y-3 sm:space-y-4">
           {/* Timezone info header */}
-          <div className="bg-accent-primary/5 border border-accent-primary/20 rounded-lg p-3 mb-4">
-            <div className="flex items-center text-sm text-text-main font-open-sans">
-              <Clock className="h-4 w-4 mr-2 text-accent-primary" />
+          <div className="bg-accent-primary/5 border border-accent-primary/20 rounded-lg p-2 sm:p-3 mb-3 sm:mb-4">
+            <div className="flex items-center text-xs sm:text-sm text-text-main font-open-sans">
+              <Clock className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2 text-accent-primary flex-shrink-0" />
               <span>Zona horaria: {getTimezoneName(userTimezone)}</span>
             </div>
           </div>
 
           {/* Group */}
           <div>
-            <label className="block text-sm font-medium text-text-main font-open-sans mb-2">
+            <label className="block text-xs sm:text-sm font-medium text-text-main font-open-sans mb-1 sm:mb-2">
               Grupo *
             </label>
             <select
               value={formData.group_id}
               onChange={(e) => handleInputChange('group_id', e.target.value)}
-              className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-accent-primary focus:border-transparent bg-bg-main text-text-main font-open-sans"
+              className="w-full px-2 sm:px-3 py-1.5 sm:py-2 border border-border rounded-lg focus:ring-2 focus:ring-accent-primary focus:border-transparent bg-bg-main text-text-main font-open-sans text-sm"
             >
               <option value="">Selecciona un grupo</option>
               {userGroups.map((group) => (
@@ -341,61 +341,61 @@ export default function CreateMatchModal({ isOpen, onClose, onSubmit, userId }: 
               ))}
             </select>
             {errors.group_id && (
-              <p className="text-error text-sm mt-1 font-open-sans">{errors.group_id}</p>
+              <p className="text-error text-xs sm:text-sm mt-1 font-open-sans">{errors.group_id}</p>
             )}
           </div>
 
           {/* Date and Time */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             {/* Date */}
             <div>
-              <label className="block text-sm font-medium text-text-main font-open-sans mb-2">
+              <label className="block text-xs sm:text-sm font-medium text-text-main font-open-sans mb-1 sm:mb-2">
                 Fecha *
               </label>
               <input
                 type="date"
                 value={formData.date}
                 onChange={(e) => setFormData(prev => ({ ...prev, date: e.target.value }))}
-                className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-accent-primary focus:border-transparent bg-bg-main text-text-main font-open-sans"
+                className="w-full px-2 sm:px-3 py-1.5 sm:py-2 border border-border rounded-lg focus:ring-2 focus:ring-accent-primary focus:border-transparent bg-bg-main text-text-main font-open-sans text-sm"
               />
               {errors.date && (
-                <p className="text-error text-sm mt-1 font-open-sans">{errors.date}</p>
+                <p className="text-error text-xs sm:text-sm mt-1 font-open-sans">{errors.date}</p>
               )}
             </div>
 
             {/* Time */}
             <div>
-              <label className="block text-sm font-medium text-text-main font-open-sans mb-2">
+              <label className="block text-xs sm:text-sm font-medium text-text-main font-open-sans mb-1 sm:mb-2">
                 Hora *
               </label>
               <input
                 type="time"
                 value={formData.time}
                 onChange={(e) => setFormData(prev => ({ ...prev, time: e.target.value }))}
-                className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-accent-primary focus:border-transparent bg-bg-main text-text-main font-open-sans"
+                className="w-full px-2 sm:px-3 py-1.5 sm:py-2 border border-border rounded-lg focus:ring-2 focus:ring-accent-primary focus:border-transparent bg-bg-main text-text-main font-open-sans text-sm"
               />
               {errors.time && (
-                <p className="text-error text-sm mt-1 font-open-sans">{errors.time}</p>
+                <p className="text-error text-xs sm:text-sm mt-1 font-open-sans">{errors.time}</p>
               )}
             </div>
           </div>
 
           {/* Location Search */}
           <div>
-            <label className="block text-sm font-medium text-text-main font-open-sans mb-2">
+            <label className="block text-xs sm:text-sm font-medium text-text-main font-open-sans mb-1 sm:mb-2">
               Ubicación del Club/Pista *
             </label>
             
             {/* Información del grupo seleccionado */}
             {formData.group_id ? (
-              <div className="mb-3 p-3 bg-accent-primary/5 border border-accent-primary/20 rounded-lg">
-                <div className="flex items-center text-sm text-text-main font-open-sans">
-                  <svg className="h-4 w-4 mr-2 text-accent-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="mb-2 sm:mb-3 p-2 sm:p-3 bg-accent-primary/5 border border-accent-primary/20 rounded-lg">
+                <div className="flex items-center text-xs sm:text-sm text-text-main font-open-sans">
+                  <svg className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2 text-accent-primary flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                   </svg>
                   <span className="font-medium">Búsqueda en: </span>
-                  <span className="ml-1">
+                  <span className="ml-1 truncate">
                     {(() => {
                        const selectedGroup = userGroups.find(g => g.id === formData.group_id)
                        if (selectedGroup) {
@@ -410,12 +410,12 @@ export default function CreateMatchModal({ isOpen, onClose, onSubmit, userId }: 
                 </div>
               </div>
             ) : (
-              <div className="mb-3 p-3 bg-warning/10 border border-warning/30 rounded-lg">
-                <div className="flex items-center text-sm text-warning font-open-sans">
-                  <svg className="h-4 w-4 mr-2 text-warning" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="mb-3 p-2 sm:p-3 bg-warning/10 border border-warning/30 rounded-lg">
+                <div className="flex items-start sm:items-center text-xs sm:text-sm text-warning font-open-sans">
+                  <svg className="h-3 w-3 sm:h-4 sm:w-4 mr-2 mt-0.5 sm:mt-0 flex-shrink-0 text-warning" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16c-.77.833.192 2.5 1.732 2.5z" />
                   </svg>
-                  <span>Selecciona un grupo primero para habilitar la búsqueda de ubicación</span>
+                  <span className="leading-tight">Selecciona un grupo primero para habilitar la búsqueda de ubicación</span>
                 </div>
               </div>
             )}
@@ -457,10 +457,10 @@ export default function CreateMatchModal({ isOpen, onClose, onSubmit, userId }: 
 
           {/* Public/Private */}
           <div>
-            <label className="block text-sm font-medium text-text-main font-open-sans mb-3">
+            <label className="block text-xs sm:text-sm font-medium text-text-main font-open-sans mb-2 sm:mb-3">
               Visibilidad
             </label>
-            <div className="flex space-x-6">
+            <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-6">
               <label className="flex items-center cursor-pointer">
                 <div className="relative">
                   <input
@@ -470,17 +470,17 @@ export default function CreateMatchModal({ isOpen, onClose, onSubmit, userId }: 
                     onChange={() => handleInputChange('is_public', true)}
                     className="sr-only"
                   />
-                  <div className={`w-5 h-5 rounded-full border-2 transition-all duration-200 ${
+                  <div className={`w-4 h-4 sm:w-5 sm:h-5 rounded-full border-2 transition-all duration-200 ${
                     formData.is_public 
                       ? 'border-accent-primary bg-accent-primary' 
                       : 'border-border bg-bg-main hover:border-accent-primary/50'
                   }`}>
                     {formData.is_public && (
-                      <div className="w-2 h-2 bg-bg-main rounded-full absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2"></div>
+                      <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-bg-main rounded-full absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2"></div>
                     )}
                   </div>
                 </div>
-                <span className="ml-3 text-text-main font-open-sans">Público</span>
+                <span className="ml-2 sm:ml-3 text-sm sm:text-base text-text-main font-open-sans">Público</span>
               </label>
               <label className="flex items-center cursor-pointer">
                 <div className="relative">
@@ -491,24 +491,24 @@ export default function CreateMatchModal({ isOpen, onClose, onSubmit, userId }: 
                     onChange={() => handleInputChange('is_public', false)}
                     className="sr-only"
                   />
-                  <div className={`w-5 h-5 rounded-full border-2 transition-all duration-200 ${
+                  <div className={`w-4 h-4 sm:w-5 sm:h-5 rounded-full border-2 transition-all duration-200 ${
                     !formData.is_public 
                       ? 'border-accent-primary bg-accent-primary' 
                       : 'border-border bg-bg-main hover:border-accent-primary/50'
                   }`}>
                     {!formData.is_public && (
-                      <div className="w-2 h-2 bg-bg-main rounded-full absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2"></div>
+                      <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-bg-main rounded-full absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2"></div>
                     )}
                   </div>
                 </div>
-                <span className="ml-3 text-text-main font-open-sans">Privado</span>
+                <span className="ml-2 sm:ml-3 text-sm sm:text-base text-text-main font-open-sans">Privado</span>
               </label>
             </div>
           </div>
 
           {/* Required Skill Level */}
           <div>
-            <label className="block text-sm font-medium text-text-main font-open-sans mb-2">
+            <label className="block text-xs sm:text-sm font-medium text-text-main font-open-sans mb-2">
               Nivel Requerido (1-4)
             </label>
             <input
@@ -517,26 +517,26 @@ export default function CreateMatchModal({ isOpen, onClose, onSubmit, userId }: 
               max="4"
               value={formData.required_skill_level || ''}
               onChange={(e) => handleInputChange('required_skill_level', e.target.value ? parseInt(e.target.value) : null)}
-              className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-accent-primary focus:border-transparent bg-bg-main text-text-main font-open-sans"
+              className="w-full px-3 py-2 sm:py-2.5 border border-border rounded-lg focus:ring-2 focus:ring-accent-primary focus:border-transparent bg-bg-main text-text-main font-open-sans text-sm sm:text-base"
               placeholder="Opcional"
             />
             {errors.required_skill_level && (
-              <p className="text-error text-sm mt-1 font-open-sans">{errors.required_skill_level}</p>
+              <p className="text-error text-xs sm:text-sm mt-1 font-open-sans">{errors.required_skill_level}</p>
             )}
           </div>
           {/* Actions */}
-          <div className="flex gap-3 pt-4">
+          <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 pt-3 sm:pt-4">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-4 py-2 border border-border text-text-secondary rounded-lg hover:bg-bg-secondary transition-colors font-open-sans"
+              className="w-full sm:flex-1 px-4 py-2.5 sm:py-2 border border-border text-text-secondary rounded-lg hover:bg-bg-secondary transition-colors font-open-sans text-sm sm:text-base"
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={isSubmitting || userGroups.length === 0}
-              className="flex-1 px-4 py-2 bg-accent-primary text-bg-main rounded-lg hover:bg-accent-primary/90 transition-colors font-open-sans disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full sm:flex-1 px-4 py-2.5 sm:py-2 bg-accent-primary text-bg-main rounded-lg hover:bg-accent-primary/90 transition-colors font-open-sans disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base"
             >
               {isSubmitting ? 'Creando...' : 'Crear Partido'}
             </button>

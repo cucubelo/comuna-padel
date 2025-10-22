@@ -1,5 +1,6 @@
 import { supabase } from "./supabase";
 import type { Database } from "./types/supabase";
+import { notificationService } from "./services/notificationService";
 
 // Tipos explícitos para las operaciones
 export type GroupAccessRequestRow =
@@ -73,6 +74,22 @@ export async function createAccessRequest({
       throw new Error("Ya eres miembro de este grupo");
     }
 
+    // Obtener información del grupo y del administrador
+    const { data: groupInfo, error: groupError } = await supabase
+      .from("groups")
+      .select(`
+        name,
+        created_by,
+        profiles:profiles!groups_created_by_fkey (
+          first_name,
+          last_name
+        )
+      `)
+      .eq("id", groupId)
+      .single();
+
+    if (groupError) throw groupError;
+
     // Crear la solicitud de acceso
     const requestData: GroupAccessRequestInsert = {
       group_id: groupId,
@@ -89,6 +106,23 @@ export async function createAccessRequest({
       .single();
 
     if (error) throw error;
+
+    // Crear notificación para el administrador del grupo
+    if (groupInfo && groupInfo.created_by) {
+      try {
+        await notificationService.createGroupRequestNotification(
+          groupInfo.created_by,
+          userId,
+          {
+            groupId: groupId,
+            groupName: groupInfo.name
+          }
+        );
+      } catch (notificationError) {
+        console.error("Error creating notification:", notificationError);
+        // No fallar la operación principal si falla la notificación
+      }
+    }
 
     return { data, error: null };
   } catch (error) {
@@ -202,7 +236,16 @@ export async function approveAccessRequest(
     // Obtener la solicitud
     const { data: request, error: fetchError } = await supabase
       .from("group_access_requests")
-      .select("*")
+      .select(`
+        *,
+        groups (
+          name
+        ),
+        profiles (
+          first_name,
+          last_name
+        )
+      `)
       .eq("id", requestId)
       .single();
 
@@ -240,6 +283,23 @@ export async function approveAccessRequest(
 
     if (insertError) throw insertError;
 
+    // Crear notificación para el usuario que hizo la solicitud
+    try {
+      await notificationService.createSystemNotification(
+        request.user_id,
+        "Solicitud de grupo aprobada",
+        `Tu solicitud para unirte al grupo "${request.groups?.name}" ha sido aprobada. ¡Bienvenido!`,
+        {
+          groupId: request.group_id,
+          groupName: request.groups?.name,
+          adminResponse: adminResponse
+        }
+      );
+    } catch (notificationError) {
+      console.error("Error creating approval notification:", notificationError);
+      // No fallar la operación principal si falla la notificación
+    }
+
     return { error: null };
   } catch (error) {
     console.error("Error approving access request:", error);
@@ -267,7 +327,16 @@ export async function rejectAccessRequest(
     // Obtener la solicitud
     const { data: request, error: fetchError } = await supabase
       .from("group_access_requests")
-      .select("*")
+      .select(`
+        *,
+        groups (
+          name
+        ),
+        profiles (
+          first_name,
+          last_name
+        )
+      `)
       .eq("id", requestId)
       .single();
 
@@ -289,6 +358,23 @@ export async function rejectAccessRequest(
       .eq("id", requestId);
 
     if (updateError) throw updateError;
+
+    // Crear notificación para el usuario que hizo la solicitud
+    try {
+      await notificationService.createSystemNotification(
+        request.user_id,
+        "Solicitud de grupo rechazada",
+        `Tu solicitud para unirte al grupo "${request.groups?.name}" ha sido rechazada.${adminResponse ? ` Motivo: ${adminResponse}` : ''}`,
+        {
+          groupId: request.group_id,
+          groupName: request.groups?.name,
+          adminResponse: adminResponse
+        }
+      );
+    } catch (notificationError) {
+      console.error("Error creating rejection notification:", notificationError);
+      // No fallar la operación principal si falla la notificación
+    }
 
     return { error: null };
   } catch (error) {

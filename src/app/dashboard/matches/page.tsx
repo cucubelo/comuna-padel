@@ -91,7 +91,7 @@ export default function MatchesPage() {
         `, { count: 'exact' })
         .in('group_id', groupIds)
         .neq('status', 'canceled')
-        .order('scheduled_at', { ascending: true })
+        .order('scheduled_at', { ascending: false })
         .range(offset, offset + matchesPerPage - 1)
 
       if (error) {
@@ -284,6 +284,51 @@ export default function MatchesPage() {
     }
   }, [user, fetchMatches])
 
+  // Suscripción en tiempo real para cambios en invitaciones de partidos
+  useEffect(() => {
+    if (!user?.id) return
+
+    const invitationsSubscription = supabase
+      .channel(`match_invitations_user_${user.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "match_invitations",
+        },
+        (payload) => {
+          console.log("Cambio en invitaciones:", payload);
+          // Recargar los partidos cuando hay cambios en invitaciones
+          fetchMatches();
+        }
+      )
+      .subscribe();
+
+    // Suscripción en tiempo real para cambios en participantes de partidos
+    const participantsSubscription = supabase
+      .channel(`match_participants_user_${user.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "match_participants",
+        },
+        (payload) => {
+          console.log("Cambio en participantes:", payload);
+          // Recargar los partidos cuando hay cambios en participantes
+          fetchMatches();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      invitationsSubscription.unsubscribe();
+      participantsSubscription.unsubscribe();
+    };
+  }, [user?.id, fetchMatches])
+
   useEffect(() => {
     applyFilters()
   }, [matches, filter, searchTerm, applyFilters])
@@ -404,46 +449,46 @@ export default function MatchesPage() {
   }
 
   return (
-    <div className="min-h-screen bg-bg-main p-6">
+    <div className="min-h-screen bg-bg-main p-3 sm:p-6">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8">
-          <div>
-            <h1 className="text-3xl font-bold text-text-main font-montserrat mb-2">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 sm:mb-8">
+          <div className="mb-4 sm:mb-0">
+            <h1 className="text-2xl sm:text-3xl font-bold text-text-main font-montserrat mb-2">
               Gestión de Partidos
             </h1>
-            <p className="text-text-secondary font-open-sans">
+            <p className="text-text-secondary font-open-sans text-sm sm:text-base">
               Organiza y participa en partidos de pádel
             </p>
           </div>
           <Link 
             href="/dashboard/matches/create"
-            className="mt-4 sm:mt-0 bg-accent-primary text-bg-main px-6 py-3 rounded-lg hover:bg-accent-primary/90 transition-colors font-open-sans font-medium shadow-lg inline-block"
+            className="w-full sm:w-auto text-center bg-accent-primary text-bg-main px-4 sm:px-6 py-3 rounded-lg hover:bg-accent-primary/90 transition-colors font-open-sans font-medium shadow-lg inline-block"
           >
             + Crear Partido
           </Link>
         </div>
 
         {/* Search and Filters */}
-        <div className="bg-bg-secondary border border-border rounded-lg p-6 mb-8">
+        <div className="bg-bg-secondary border border-border rounded-lg p-4 sm:p-6 mb-6 sm:mb-8">
           {/* Search */}
-          <div className="mb-6">
+          <div className="mb-4 sm:mb-6">
             <div className="relative">
-              <svg className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
               <input
                 type="text"
-                placeholder="Buscar partidos por título, descripción, grupo o ubicación..."
+                placeholder="Buscar partidos..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 border border-border rounded-lg focus:ring-2 focus:ring-accent-primary focus:border-transparent bg-bg-main text-text-main font-open-sans"
+                className="w-full pl-9 sm:pl-10 pr-4 py-2.5 sm:py-3 border border-border rounded-lg focus:ring-2 focus:ring-accent-primary focus:border-transparent bg-bg-main text-text-main font-open-sans text-sm sm:text-base"
               />
             </div>
           </div>
 
           {/* Filter Tabs */}
-          <div className="flex flex-wrap gap-2 mb-4">
+          <div className="flex flex-wrap gap-1.5 sm:gap-2 mb-4 overflow-x-auto pb-2">
             {[
               { key: 'all', label: 'Todos', count: counts.all },
               { key: 'my_matches', label: 'Mis Partidos', count: counts.my_matches },
@@ -454,13 +499,14 @@ export default function MatchesPage() {
               <button
                 key={key}
                 onClick={() => setFilter(key as FilterType)}
-                className={`px-4 py-2 rounded-lg font-open-sans font-medium transition-colors ${
+                className={`flex-shrink-0 px-3 sm:px-4 py-2 rounded-lg font-open-sans font-medium transition-colors text-xs sm:text-sm ${
                   filter === key
                     ? 'bg-accent-primary text-bg-main'
                     : 'bg-bg-main text-text-secondary hover:text-text-main border border-border'
                 }`}
               >
-                {label} ({count})
+                <span className="hidden sm:inline">{label} ({count})</span>
+                <span className="sm:hidden">{label.split(' ')[0]} ({count})</span>
               </button>
             ))}
           </div>
@@ -469,26 +515,26 @@ export default function MatchesPage() {
           <div className="flex gap-2">
             <button
               onClick={() => setView('list')}
-              className={`px-4 py-2 rounded-lg font-open-sans font-medium transition-colors ${
+              className={`flex-1 sm:flex-none px-3 sm:px-4 py-2 rounded-lg font-open-sans font-medium transition-colors text-xs sm:text-sm ${
                 view === 'list'
                   ? 'bg-accent-primary text-bg-main'
                   : 'bg-bg-main text-text-secondary hover:text-text-main border border-border'
               }`}
             >
-              <svg className="h-5 w-5 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="h-4 w-4 inline mr-1 sm:mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
               </svg>
               Lista
             </button>
             <button
               onClick={() => setView('calendar')}
-              className={`px-4 py-2 rounded-lg font-open-sans font-medium transition-colors ${
+              className={`flex-1 sm:flex-none px-3 sm:px-4 py-2 rounded-lg font-open-sans font-medium transition-colors text-xs sm:text-sm ${
                 view === 'calendar'
                   ? 'bg-accent-primary text-bg-main'
                   : 'bg-bg-main text-text-secondary hover:text-text-main border border-border'
               }`}
             >
-              <svg className="h-5 w-5 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="h-4 w-4 inline mr-1 sm:mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
               </svg>
               Calendario
@@ -502,7 +548,7 @@ export default function MatchesPage() {
         {/* Content */}
         {view === 'list' ? (
           <>
-            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
               {paginatedMatches.length > 0 ? (
                 paginatedMatches.map((match) => (
                   <MatchCard
@@ -532,14 +578,14 @@ export default function MatchesPage() {
                   />
                 ))
               ) : (
-                <div className="col-span-full text-center py-12">
-                  <svg className="h-16 w-16 text-text-secondary mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="col-span-full text-center py-8 sm:py-12">
+                  <svg className="h-12 w-12 sm:h-16 sm:w-16 text-text-secondary mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                   </svg>
-                  <h3 className="text-lg font-medium text-text-main font-montserrat mb-2">
+                  <h3 className="text-base sm:text-lg font-medium text-text-main font-montserrat mb-2">
                     No hay partidos
                   </h3>
-                  <p className="text-text-secondary font-open-sans mb-4">
+                  <p className="text-text-secondary font-open-sans mb-4 text-sm sm:text-base px-4">
                     {filter === 'available' 
                       ? 'No hay partidos disponibles para unirse en este momento.'
                       : filter === 'my_matches'
@@ -550,7 +596,7 @@ export default function MatchesPage() {
                   {filter !== 'my_matches' && (
                     <Link
                       href="/dashboard/matches/create"
-                      className="bg-accent-primary text-bg-main px-6 py-2 rounded-lg hover:bg-accent-primary/90 transition-colors font-open-sans inline-block"
+                      className="bg-accent-primary text-bg-main px-4 sm:px-6 py-2 rounded-lg hover:bg-accent-primary/90 transition-colors font-open-sans inline-block text-sm sm:text-base"
                     >
                       Crear Primer Partido
                     </Link>
@@ -561,31 +607,31 @@ export default function MatchesPage() {
 
             {/* Controles de Paginación */}
             {totalMatches > matchesPerPage && (
-              <div className="mt-8 flex flex-col sm:flex-row items-center justify-between gap-4 bg-bg-main border border-border rounded-lg p-4">
+              <div className="mt-6 sm:mt-8 flex flex-col sm:flex-row items-center justify-between gap-4 bg-bg-main border border-border rounded-lg p-3 sm:p-4">
                 {/* Información de página */}
-                <div className="text-sm text-text-secondary font-open-sans">
+                <div className="text-xs sm:text-sm text-text-secondary font-open-sans order-2 sm:order-1">
                   Mostrando {startItem} - {endItem} de {totalMatches} partidos
                 </div>
 
                 {/* Controles de navegación */}
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1 sm:gap-2 order-1 sm:order-2">
                   {/* Botón Anterior */}
                   <button
                     onClick={() => handlePageChange(currentPage - 1)}
                     disabled={currentPage === 1}
-                    className={`px-3 py-2 rounded-lg font-open-sans font-medium transition-colors ${
+                    className={`px-2 sm:px-3 py-2 rounded-lg font-open-sans font-medium transition-colors text-xs sm:text-sm ${
                       currentPage === 1
                         ? 'bg-bg-secondary text-text-secondary cursor-not-allowed'
                         : 'bg-bg-secondary text-text-main hover:bg-accent-primary hover:text-bg-main border border-border'
                     }`}
                   >
-                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="h-3 w-3 sm:h-4 sm:w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                     </svg>
                   </button>
 
                   {/* Números de página */}
-                  <div className="flex gap-1">
+                  <div className="flex gap-0.5 sm:gap-1">
                     {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
                       let pageNumber;
                       if (totalPages <= 5) {
