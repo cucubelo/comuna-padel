@@ -59,9 +59,6 @@ export default function MatchDetailsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [userStatus, setUserStatus] = useState<string | null>(null);
-  const [showResultsForm, setShowResultsForm] = useState(false);
-  const [team1Score, setTeam1Score] = useState<number>(0);
-  const [team2Score, setTeam2Score] = useState<number>(0);
   const [savingResults, setSavingResults] = useState(false);
 
   // Estados para diálogos de confirmación
@@ -358,51 +355,83 @@ export default function MatchDetailsPage() {
     e.dataTransfer.dropEffect = "move";
   };
 
-  const handleDrop = (
+  const handleDrop = async (
     e: React.DragEvent,
     targetTeam: "team1" | "team2" | "unassigned"
   ) => {
     e.preventDefault();
 
-    if (!draggedPlayer) return;
+    if (!draggedPlayer || !match) return;
 
-    // Encontrar el jugador en cualquier equipo
-    const findPlayerInTeams = () => {
-      if (teams.team1.find((p) => p.user_id === draggedPlayer)) return "team1";
-      if (teams.team2.find((p) => p.user_id === draggedPlayer)) return "team2";
-      if (teams.unassigned.find((p) => p.user_id === draggedPlayer))
-        return "unassigned";
-      return null;
-    };
+    // Encontrar el jugador actual
+    const currentPlayer = match.match_participants.find(
+      (p) => p.user_id === draggedPlayer
+    );
+    
+    if (!currentPlayer) {
+      setDraggedPlayer(null);
+      return;
+    }
 
-    const sourceTeam = findPlayerInTeams();
-    if (!sourceTeam || sourceTeam === targetTeam) {
+    // Determinar el número de equipo objetivo
+    let targetTeamNumber: number | null = null;
+    if (targetTeam === "team1") targetTeamNumber = 1;
+    else if (targetTeam === "team2") targetTeamNumber = 2;
+    else targetTeamNumber = null;
+
+    // Si ya está en el equipo objetivo, no hacer nada
+    if (currentPlayer.team_number === targetTeamNumber) {
       setDraggedPlayer(null);
       return;
     }
 
     // Verificar límites de equipo (máximo 2 jugadores por equipo)
-    if (
-      (targetTeam === "team1" || targetTeam === "team2") &&
-      teams[targetTeam].length >= 2
-    ) {
-      showError("Cada equipo puede tener máximo 2 jugadores");
-      setDraggedPlayer(null);
-      return;
+    if (targetTeamNumber && targetTeamNumber > 0) {
+      const currentTeamSize = match.match_participants.filter(
+        (p) => p.team_number === targetTeamNumber
+      ).length;
+      
+      if (currentTeamSize >= 2) {
+        showError("Cada equipo puede tener máximo 2 jugadores");
+        setDraggedPlayer(null);
+        return;
+      }
     }
 
-    // Mover jugador
-    const player = teams[sourceTeam].find((p) => p.user_id === draggedPlayer);
-    if (!player) {
-      setDraggedPlayer(null);
-      return;
-    }
+    try {
+      // Actualizar en la base de datos
+      const { error } = await supabase
+        .from("match_participants")
+        .update({ team_number: targetTeamNumber })
+        .eq("match_id", match.id)
+        .eq("user_id", draggedPlayer);
 
-    setTeams((prev) => ({
-      ...prev,
-      [sourceTeam]: prev[sourceTeam].filter((p) => p.user_id !== draggedPlayer),
-      [targetTeam]: [...prev[targetTeam], player],
-    }));
+      if (error) {
+        console.error("Error updating team assignment:", error);
+        showError("Error al asignar jugador al equipo");
+        setDraggedPlayer(null);
+        return;
+      }
+
+      // Actualizar el estado local
+      setMatch((prevMatch) => {
+        if (!prevMatch) return prevMatch;
+        
+        return {
+          ...prevMatch,
+          match_participants: prevMatch.match_participants.map((p) =>
+            p.user_id === draggedPlayer
+              ? { ...p, team_number: targetTeamNumber }
+              : p
+          ),
+        };
+      });
+
+      showSuccess("Jugador asignado correctamente");
+    } catch (error) {
+      console.error("Error updating team assignment:", error);
+      showError("Error al asignar jugador al equipo");
+    }
 
     setDraggedPlayer(null);
   };
@@ -502,7 +531,6 @@ export default function MatchDetailsPage() {
           team1_score: team1TotalScore,
           team2_score: team2TotalScore,
           status: "completed",
-          winner_team: matchWinner,
         })
         .eq("id", match.id);
 
@@ -796,33 +824,6 @@ export default function MatchDetailsPage() {
     } catch (err) {
       console.error("Error cancelling match:", err);
       showError("Error al cancelar el partido");
-    }
-  };
-
-  const handleSaveResults = async () => {
-    if (!user || !match || match.creator_id !== user.id) return;
-
-    setSavingResults(true);
-    try {
-      const { error } = await supabase
-        .from("matches")
-        .update({
-          team1_score: team1Score,
-          team2_score: team2Score,
-        })
-        .eq("id", match.id);
-
-      if (error) throw error;
-
-      // Actualizar el estado local
-      await fetchMatchDetails();
-      setShowResultsForm(false);
-      showSuccess("Resultados guardados exitosamente");
-    } catch (err) {
-      console.error("Error saving results:", err);
-      showError("Error al guardar los resultados");
-    } finally {
-      setSavingResults(false);
     }
   };
 
@@ -1427,39 +1428,17 @@ export default function MatchDetailsPage() {
                       </button>
                     )}
 
-                  {/* Botón para registrar resultados */}
+                  {/* Botón para registrar resultados por sets */}
                   {isCreator &&
                     match.status === "completed" &&
-                    !showResultsForm &&
                     !showAdvancedResults && (
-                      <>
-                        <button
-                          onClick={() => setShowResultsForm(true)}
-                          className="bg-accent-primary text-black px-6 py-2 rounded-lg font-medium hover:bg-accent-primary/90 transition-colors flex items-center gap-2"
-                        >
-                          <svg
-                            className="h-4 w-4"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                            />
-                          </svg>
-                          Resultado Simple
-                        </button>
-                        <button
-                          onClick={() => setShowAdvancedResults(true)}
-                          className="bg-accent-secondary text-white px-6 py-2 rounded-lg font-medium hover:bg-accent-secondary/90 transition-colors flex items-center gap-2"
-                        >
-                          <Trophy size={16} />
-                          Resultado por Sets
-                        </button>
-                      </>
+                      <button
+                        onClick={() => setShowAdvancedResults(true)}
+                        className="bg-accent-secondary text-white px-6 py-2 rounded-lg font-medium hover:bg-accent-secondary/90 transition-colors flex items-center gap-2"
+                      >
+                        <Trophy size={16} />
+                        Registrar Resultados
+                      </button>
                     )}
 
                   {userStatus === "confirmed" && (
@@ -1582,11 +1561,15 @@ export default function MatchDetailsPage() {
                 </button>
               </div>
 
-              {/* Información de equipos */}
+              {/* Información de equipos con drag and drop */}
               <div className="grid grid-cols-2 gap-6 mb-6">
-                <div className="bg-bg-secondary rounded-lg p-4">
+                <div 
+                  className="bg-bg-secondary rounded-lg p-4 min-h-[150px] border-2 border-dashed border-accent-primary/30"
+                  onDragOver={handleDragOver}
+                  onDrop={(e) => handleDrop(e, "team1")}
+                >
                   <h3 className="text-lg font-semibold text-accent-primary mb-3 text-center">
-                    Equipo 1
+                    Equipo 1 ({match.match_participants.filter((p) => p.team_number === 1).length}/2)
                   </h3>
                   <div className="space-y-2">
                     {match.match_participants
@@ -1594,7 +1577,9 @@ export default function MatchDetailsPage() {
                       .map((participant) => (
                         <div
                           key={participant.user_id}
-                          className="flex items-center"
+                          draggable
+                          onDragStart={(e) => handleDragStart(e, participant.user_id)}
+                          className="flex items-center p-2 bg-bg-main rounded-lg cursor-move hover:shadow-md transition-shadow border border-accent-primary/20"
                         >
                           <div className="w-6 h-6 rounded-full overflow-hidden bg-accent-primary/10 flex items-center justify-center mr-2">
                             {participant.profiles?.avatar_url ? (
@@ -1619,9 +1604,13 @@ export default function MatchDetailsPage() {
                   </div>
                 </div>
 
-                <div className="bg-bg-secondary rounded-lg p-4">
+                <div 
+                  className="bg-bg-secondary rounded-lg p-4 min-h-[150px] border-2 border-dashed border-accent-secondary/30"
+                  onDragOver={handleDragOver}
+                  onDrop={(e) => handleDrop(e, "team2")}
+                >
                   <h3 className="text-lg font-semibold text-accent-secondary mb-3 text-center">
-                    Equipo 2
+                    Equipo 2 ({match.match_participants.filter((p) => p.team_number === 2).length}/2)
                   </h3>
                   <div className="space-y-2">
                     {match.match_participants
@@ -1629,7 +1618,9 @@ export default function MatchDetailsPage() {
                       .map((participant) => (
                         <div
                           key={participant.user_id}
-                          className="flex items-center"
+                          draggable
+                          onDragStart={(e) => handleDragStart(e, participant.user_id)}
+                          className="flex items-center p-2 bg-bg-main rounded-lg cursor-move hover:shadow-md transition-shadow border border-accent-secondary/20"
                         >
                           <div className="w-6 h-6 rounded-full overflow-hidden bg-accent-secondary/10 flex items-center justify-center mr-2">
                             {participant.profiles?.avatar_url ? (
@@ -1655,6 +1646,93 @@ export default function MatchDetailsPage() {
                 </div>
               </div>
 
+              {/* Jugadores sin asignar */}
+              {match.match_participants.filter((p) => !p.team_number || p.team_number === 0).length > 0 && (
+                <div 
+                  className="bg-bg-secondary rounded-lg p-4 mb-6 min-h-[100px] border-2 border-dashed border-text-secondary/30"
+                  onDragOver={handleDragOver}
+                  onDrop={(e) => handleDrop(e, "unassigned")}
+                >
+                  <h3 className="text-lg font-semibold text-text-secondary mb-3 text-center">
+                    Sin Asignar ({match.match_participants.filter((p) => !p.team_number || p.team_number === 0).length})
+                  </h3>
+                  <div className="space-y-2">
+                    {match.match_participants
+                      .filter((p) => !p.team_number || p.team_number === 0)
+                      .map((participant) => (
+                        <div
+                          key={participant.user_id}
+                          draggable
+                          onDragStart={(e) => handleDragStart(e, participant.user_id)}
+                          className="flex items-center p-2 bg-bg-main rounded-lg cursor-move hover:shadow-md transition-shadow border border-text-secondary/20"
+                        >
+                          <div className="w-6 h-6 rounded-full overflow-hidden bg-text-secondary/10 flex items-center justify-center mr-2">
+                            {participant.profiles?.avatar_url ? (
+                              <img
+                                src={participant.profiles.avatar_url}
+                                alt="Avatar"
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <span className="text-text-secondary font-medium text-xs">
+                                {participant.profiles?.first_name?.charAt(0) ||
+                                  "?"}
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-text-main text-sm">
+                            {participant.profiles?.first_name}{" "}
+                            {participant.profiles?.last_name}
+                          </span>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Instrucciones */}
+              <div className="bg-info/10 border border-info/20 rounded-lg p-4 mb-6">
+                <p className="text-info text-sm">
+                  <strong>Instrucciones:</strong> Arrastra los jugadores entre los equipos. 
+                  Cada equipo debe tener exactamente 2 jugadores para poder registrar resultados.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Registro de resultados por sets */}
+          {isCreator && match.status === "scheduled" && !showAdvancedResults && (
+            <div className="bg-bg-main rounded-lg p-6 mb-6 border border-border">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold text-text-main font-montserrat">
+                  Registrar Resultados
+                </h2>
+              </div>
+
+              <button
+                onClick={() => setShowAdvancedResults(true)}
+                className="w-full bg-accent-primary text-black px-4 py-2 rounded-lg font-medium hover:bg-accent-primary/90 transition-colors mb-4"
+              >
+                Registrar Resultados
+              </button>
+            </div>
+          )}
+
+          {/* Formulario de resultados por sets */}
+          {showAdvancedResults && (
+            <div className="bg-bg-main rounded-lg p-6 mb-6 border border-border">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold text-text-main font-montserrat">
+                  Registrar Resultados por Sets
+                </h2>
+                <button
+                  onClick={() => setShowAdvancedResults(false)}
+                  className="text-text-secondary hover:text-text-main transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
               {/* Registro de sets */}
               <div className="space-y-4 mb-6">
                 {sets.map((set, index) => (
@@ -1673,13 +1751,12 @@ export default function MatchDetailsPage() {
                         <input
                           type="number"
                           min="0"
-                          max="7"
                           value={set.team1_score}
                           onChange={(e) =>
                             updateSetScore(
                               index,
                               "team1",
-                              parseInt(e.target.value) || 0
+                              Math.max(0, parseInt(e.target.value) || 0)
                             )
                           }
                           className="w-20 h-12 text-center text-xl font-bold bg-bg-main border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-primary"
@@ -1692,13 +1769,12 @@ export default function MatchDetailsPage() {
                         <input
                           type="number"
                           min="0"
-                          max="7"
                           value={set.team2_score}
                           onChange={(e) =>
                             updateSetScore(
                               index,
                               "team2",
-                              parseInt(e.target.value) || 0
+                              Math.max(0, parseInt(e.target.value) || 0)
                             )
                           }
                           className="w-20 h-12 text-center text-xl font-bold bg-bg-main border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-secondary"
@@ -2146,91 +2222,84 @@ export default function MatchDetailsPage() {
             </div>
           )}
 
-          {/* Formulario de Resultados */}
-          {showResultsForm && isCreator && (
-            <div className="bg-bg-main rounded-lg p-6 mb-6 border border-border">
-              <h2 className="text-xl font-bold text-text-main font-montserrat mb-4">
-                Registrar Resultados
-              </h2>
-
-              <div className="grid grid-cols-2 gap-6 mb-6">
-                <div>
-                  <label className="block text-sm font-medium text-text-main mb-2">
-                    Equipo 1
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="99"
-                    value={team1Score}
-                    onChange={(e) =>
-                      setTeam1Score(parseInt(e.target.value) || 0)
-                    }
-                    className="w-full px-3 py-2 border border-border rounded-lg bg-bg-secondary text-text-main focus:outline-none focus:ring-2 focus:ring-accent-primary"
-                    placeholder="0"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-text-main mb-2">
-                    Equipo 2
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="99"
-                    value={team2Score}
-                    onChange={(e) =>
-                      setTeam2Score(parseInt(e.target.value) || 0)
-                    }
-                    className="w-full px-3 py-2 border border-border rounded-lg bg-bg-secondary text-text-main focus:outline-none focus:ring-2 focus:ring-accent-primary"
-                    placeholder="0"
-                  />
-                </div>
-              </div>
-
-              <div className="flex gap-3">
-                <button
-                  onClick={handleSaveResults}
-                  disabled={savingResults}
-                  className="bg-success text-white px-6 py-2 rounded-lg font-medium hover:bg-success/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {savingResults ? "Guardando..." : "Guardar Resultados"}
-                </button>
-
-                <button
-                  onClick={() => setShowResultsForm(false)}
-                  className="bg-text-secondary/10 text-text-secondary px-6 py-2 rounded-lg font-medium hover:bg-text-secondary/20 transition-colors"
-                >
-                  Cancelar
-                </button>
-              </div>
-            </div>
-          )}
-
           {/* Mostrar Resultados si existen */}
           {match.status === "completed" &&
-            (match.team1_score !== null || match.team2_score !== null) && (
+            sets.some(set => set.team1_score > 0 || set.team2_score > 0) && (
               <div className="bg-bg-main rounded-lg p-6 mb-6 border border-border">
                 <h2 className="text-xl font-bold text-text-main font-montserrat mb-4">
-                  Resultados
+                  Resultados por Sets
                 </h2>
 
-                <div className="grid grid-cols-2 gap-6">
-                  <div className="text-center">
-                    <p className="text-sm text-text-secondary mb-2">Equipo 1</p>
-                    <p className="text-3xl font-bold text-text-main">
-                      {match.team1_score || 0}
-                    </p>
-                  </div>
-
-                  <div className="text-center">
-                    <p className="text-sm text-text-secondary mb-2">Equipo 2</p>
-                    <p className="text-3xl font-bold text-text-main">
-                      {match.team2_score || 0}
-                    </p>
-                  </div>
+                <div className="space-y-4">
+                  {sets.filter(set => set.team1_score > 0 || set.team2_score > 0).map((set) => (
+                    <div key={set.set_number} className="bg-bg-secondary rounded-lg p-4">
+                      <h4 className="text-lg font-semibold text-text-main mb-2 text-center">
+                        Set {set.set_number}
+                      </h4>
+                      <div className="grid grid-cols-2 gap-6">
+                        <div className="text-center">
+                          <p className="text-sm text-text-secondary mb-2">Equipo 1</p>
+                          <p className="text-2xl font-bold text-accent-primary">
+                            {set.team1_score}
+                          </p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-sm text-text-secondary mb-2">Equipo 2</p>
+                          <p className="text-2xl font-bold text-accent-secondary">
+                            {set.team2_score}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-center mt-3">
+                        <span
+                          className={`text-sm font-medium ${
+                            set.team1_score > set.team2_score
+                              ? "text-accent-primary"
+                              : set.team2_score > set.team1_score
+                              ? "text-accent-secondary"
+                              : "text-text-secondary"
+                          }`}
+                        >
+                          {set.team1_score > set.team2_score
+                            ? "Ganó Equipo 1"
+                            : set.team2_score > set.team1_score
+                            ? "Ganó Equipo 2"
+                            : "Empate"}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
+
+                {/* Resultado final del partido */}
+                {matchWinner && (
+                  <div className="bg-success/10 border border-success/20 rounded-lg p-4 mt-4">
+                    <div className="text-center">
+                      <h3 className="text-lg font-semibold text-success mb-2">
+                        🏆 Ganador del Partido
+                      </h3>
+                      <p
+                        className={`text-xl font-bold ${
+                          matchWinner === 1
+                            ? "text-accent-primary"
+                            : "text-accent-secondary"
+                        }`}
+                      >
+                        Equipo {matchWinner}
+                      </p>
+                      <p className="text-sm text-text-secondary mt-2">
+                        Sets ganados:{" "}
+                        {
+                          sets.filter((set) =>
+                            matchWinner === 1
+                              ? set.team1_score > set.team2_score
+                              : set.team2_score > set.team1_score
+                          ).length
+                        }
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
         </div>

@@ -5,9 +5,10 @@ export interface MatchInvitation {
   match_id: string
   inviter_id: string
   invitee_id: string
-  status: 'pending' | 'accepted' | 'declined'
+  status: 'pending' | 'accepted' | 'declined' | 'expired'
   created_at: string
   updated_at: string
+  expires_at: string
   inviter_profile?: {
     id: string
     first_name: string | null
@@ -73,13 +74,18 @@ export async function sendMatchInvitations(matchId: string, inviterId: string, i
   invitationsSent?: number;
 }> {
   try {
+    // Calcular tiempo de expiración (24 horas desde ahora)
+    const expiresAt = new Date()
+    expiresAt.setHours(expiresAt.getHours() + 24)
+
     const invitations = inviteeIds.map(inviteeId => ({
       match_id: matchId,
       inviter_id: inviterId,
       invitee_id: inviteeId,
       status: 'pending' as const,
       created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
+      updated_at: new Date().toISOString(),
+      expires_at: expiresAt.toISOString()
     }))
 
     // Usar upsert para permitir reinvitaciones
@@ -124,6 +130,7 @@ export async function getPendingInvitations(userId: string): Promise<MatchInvita
       status,
       created_at,
       updated_at,
+      expires_at,
       inviter_profile:profiles!match_invitations_inviter_id_fkey (
         id,
         first_name,
@@ -142,6 +149,7 @@ export async function getPendingInvitations(userId: string): Promise<MatchInvita
     `)
     .eq('invitee_id', userId)
     .eq('status', 'pending')
+    .gt('expires_at', new Date().toISOString()) // Solo invitaciones no expiradas
     .order('created_at', { ascending: false })
 
   if (error) {
@@ -245,11 +253,53 @@ export async function getPendingInvitationsByMatch(matchId: string): Promise<str
     .select('invitee_id')
     .eq('match_id', matchId)
     .eq('status', 'pending')
+    .gt('expires_at', new Date().toISOString()) // Solo invitaciones no expiradas
 
   if (error) {
-    console.error('Error fetching pending invitations for match:', error)
-    throw error
+    console.error('Error fetching pending invitations by match:', error)
+    return []
   }
 
   return data?.map(invitation => invitation.invitee_id) || []
+}
+
+/**
+ * Limpia automáticamente las invitaciones expiradas
+ * Cambia el estado de 'pending' a 'expired' para invitaciones que han pasado su fecha de expiración
+ */
+export async function cleanupExpiredInvitations(): Promise<{
+  success: boolean;
+  cleanedCount?: number;
+  error?: string;
+}> {
+  try {
+    const { data, error } = await supabase
+      .from('match_invitations')
+      .update({ 
+        status: 'expired' as const,
+        updated_at: new Date().toISOString()
+      })
+      .eq('status', 'pending')
+      .lt('expires_at', new Date().toISOString())
+      .select('id')
+
+    if (error) {
+      console.error('Error cleaning up expired invitations:', error)
+      return {
+        success: false,
+        error: error.message
+      }
+    }
+
+    return {
+      success: true,
+      cleanedCount: data?.length || 0
+    }
+  } catch (error) {
+    console.error('Unexpected error cleaning up expired invitations:', error)
+    return {
+      success: false,
+      error: 'Error inesperado al limpiar invitaciones expiradas'
+    }
+  }
 }

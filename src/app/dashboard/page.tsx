@@ -214,11 +214,11 @@ export default function DashboardPage() {
                           </svg>
                         </div>
                       </div>
-                      <div className="ml-3 sm:ml-4">
+                      <div className="ml-3 sm:ml-4 min-w-0 flex-1">
                         <h3 className="text-base sm:text-lg font-semibold text-text-main font-montserrat">
                           Contacto
                         </h3>
-                        <p className="text-xs sm:text-sm text-text-secondary font-open-sans truncate">
+                        <p className="text-xs sm:text-sm text-text-secondary font-open-sans truncate break-all">
                           {user?.email}
                         </p>
                         <p className="text-xs text-text-secondary/80 font-open-sans">
@@ -244,10 +244,25 @@ export default function DashboardPage() {
                           Ubicación
                         </h3>
                         <p className="text-xs sm:text-sm text-text-secondary font-open-sans">
-                          {profile?.location || 'No definida'}
+                          {(() => {
+                            const city = profile?.city || profile?.place_name;
+                            const country = profile?.country;
+                            
+                            if (city && country) {
+                              return `${city}, ${country}`;
+                            } else if (city) {
+                              return city;
+                            } else if (country) {
+                              return country;
+                            } else {
+                              return 'No definida';
+                            }
+                          })()}
                         </p>
                         <p className="text-xs text-text-secondary/80 font-open-sans">
-                          Posición: {profile?.preferred_position || 'Ambas'}
+                          Posición: {profile?.preferred_position === 'both' ? 'Ambas' : 
+                                   profile?.preferred_position === 'right' ? 'Derecha' : 
+                                   profile?.preferred_position === 'left' ? 'Izquierda' : 'Ambas'}
                         </p>
                       </div>
                     </div>

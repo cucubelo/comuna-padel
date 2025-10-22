@@ -32,6 +32,12 @@ export default function MatchesPage() {
   const [filter, setFilter] = useState<FilterType>('all')
   const [view, setView] = useState<ViewType>('list')
   const [searchTerm, setSearchTerm] = useState('')
+  
+  // Estados para paginación
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalMatches, setTotalMatches] = useState(0)
+  const [paginatedMatches, setPaginatedMatches] = useState<Match[]>([])
+  const matchesPerPage = 10
 
   const fetchMatches = useCallback(async () => {
     try {
@@ -39,6 +45,7 @@ export default function MatchesPage() {
       
       if (!user?.id) {
         setMatches([])
+        setTotalMatches(0)
         return
       }
 
@@ -51,19 +58,24 @@ export default function MatchesPage() {
       if (groupsError) {
         console.warn('Error fetching user groups:', groupsError)
         setMatches([])
+        setTotalMatches(0)
         return
       }
 
       // Si el usuario no pertenece a ningún grupo, no mostrar partidos
       if (!userGroups || userGroups.length === 0) {
         setMatches([])
+        setTotalMatches(0)
         return
       }
 
       const groupIds = userGroups.map(g => g.group_id)
 
-      // Obtener solo los partidos de los grupos donde el usuario es miembro
-      const { data, error } = await supabase
+      // Calcular offset para la paginación
+      const offset = (currentPage - 1) * matchesPerPage
+
+      // Obtener los partidos de la página actual y el conteo total en una sola consulta
+      const { data, error, count } = await supabase
         .from('matches')
         .select(`
           *,
@@ -76,16 +88,21 @@ export default function MatchesPage() {
             *,
             profiles (*)
           )
-        `)
+        `, { count: 'exact' })
         .in('group_id', groupIds)
         .neq('status', 'canceled')
         .order('scheduled_at', { ascending: true })
+        .range(offset, offset + matchesPerPage - 1)
 
       if (error) {
         console.warn('Error fetching matches:', error)
         setMatches([])
+        setTotalMatches(0)
         return
       }
+
+      // Establecer el conteo total
+      setTotalMatches(count || 0)
 
       // Cambiar automáticamente el estado de partidos pasados
       const now = new Date()
@@ -196,10 +213,11 @@ export default function MatchesPage() {
     } catch (error) {
       console.error('Error fetching matches:', error)
       setMatches([])
+      setTotalMatches(0)
     } finally {
       setLoading(false)
     }
-  }, [user?.id])
+  }, [user?.id, currentPage])
 
   const applyFilters = useCallback(() => {
     let filtered = matches
@@ -241,7 +259,24 @@ export default function MatchesPage() {
     }
 
     setFilteredMatches(filtered)
+    setPaginatedMatches(filtered)
   }, [matches, filter, searchTerm, user])
+
+  // Función para cambiar de página
+  const handlePageChange = (newPage: number) => {
+    setCurrentPage(newPage)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  // Calcular información de paginación
+  const totalPages = Math.ceil(totalMatches / matchesPerPage)
+  const startItem = (currentPage - 1) * matchesPerPage + 1
+  const endItem = Math.min(currentPage * matchesPerPage, totalMatches)
+
+  // Resetear página cuando cambian los filtros
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [filter, searchTerm])
 
   useEffect(() => {
     if (user) {
@@ -466,62 +501,142 @@ export default function MatchesPage() {
 
         {/* Content */}
         {view === 'list' ? (
-          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-            {filteredMatches.length > 0 ? (
-              filteredMatches.map((match) => (
-                <MatchCard
-                  key={match.id}
-                  match={{
-                    id: match.id,
-                    scheduled_at: match.scheduled_at,
-                    location_name: match.location_name,
-                    latitude: match.latitude,
-                    longitude: match.longitude,
-                    is_public: match.is_public,
-                    required_skill_level: match.required_skill_level?.toString() || null,
-                    team1_score: match.team1_score,
-                    team2_score: match.team2_score,
-                    status: match.status,
-                    current_participants: match.match_participants.filter(p => p.status === 'confirmed').length,
-                    group_name: match.groups?.name || 'Sin grupo',
-                    creator_name: match.profiles 
-          ? [match.profiles.first_name, match.profiles.last_name].filter(Boolean).join(' ') || 'Creador desconocido'
-          : 'Creador desconocido',
-                    user_status: getUserStatus(match)
-                  }}
-                  onJoin={() => handleJoinMatch(match.id)}
-                  onLeave={() => handleLeaveMatch(match.id)}
-                  onCancel={() => handleCancelMatch(match.id)}
-                  isCreator={match.creator_id === user?.id}
-                />
-              ))
-            ) : (
-              <div className="col-span-full text-center py-12">
-                <svg className="h-16 w-16 text-text-secondary mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                </svg>
-                <h3 className="text-lg font-medium text-text-main font-montserrat mb-2">
-                  No hay partidos
-                </h3>
-                <p className="text-text-secondary font-open-sans mb-4">
-                  {filter === 'available' 
-                    ? 'No hay partidos disponibles para unirse en este momento.'
-                    : filter === 'my_matches'
-                    ? 'No tienes partidos organizados o confirmados.'
-                    : 'No se encontraron partidos con los filtros seleccionados.'
-                  }
-                </p>
-                {filter !== 'my_matches' && (
-                  <Link
-                    href="/dashboard/matches/create"
-                    className="bg-accent-primary text-bg-main px-6 py-2 rounded-lg hover:bg-accent-primary/90 transition-colors font-open-sans inline-block"
+          <>
+            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+              {paginatedMatches.length > 0 ? (
+                paginatedMatches.map((match) => (
+                  <MatchCard
+                    key={match.id}
+                    match={{
+                      id: match.id,
+                      scheduled_at: match.scheduled_at,
+                      location_name: match.location_name,
+                      latitude: match.latitude,
+                      longitude: match.longitude,
+                      is_public: match.is_public,
+                      required_skill_level: match.required_skill_level?.toString() || null,
+                      team1_score: match.team1_score,
+                      team2_score: match.team2_score,
+                      status: match.status,
+                      current_participants: match.match_participants.filter(p => p.status === 'confirmed').length,
+                      group_name: match.groups?.name || 'Sin grupo',
+                      creator_name: match.profiles 
+            ? [match.profiles.first_name, match.profiles.last_name].filter(Boolean).join(' ') || 'Creador desconocido'
+            : 'Creador desconocido',
+                      user_status: getUserStatus(match)
+                    }}
+                    onJoin={() => handleJoinMatch(match.id)}
+                    onLeave={() => handleLeaveMatch(match.id)}
+                    onCancel={() => handleCancelMatch(match.id)}
+                    isCreator={match.creator_id === user?.id}
+                  />
+                ))
+              ) : (
+                <div className="col-span-full text-center py-12">
+                  <svg className="h-16 w-16 text-text-secondary mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  </svg>
+                  <h3 className="text-lg font-medium text-text-main font-montserrat mb-2">
+                    No hay partidos
+                  </h3>
+                  <p className="text-text-secondary font-open-sans mb-4">
+                    {filter === 'available' 
+                      ? 'No hay partidos disponibles para unirse en este momento.'
+                      : filter === 'my_matches'
+                      ? 'No tienes partidos organizados o confirmados.'
+                      : 'No se encontraron partidos con los filtros seleccionados.'
+                    }
+                  </p>
+                  {filter !== 'my_matches' && (
+                    <Link
+                      href="/dashboard/matches/create"
+                      className="bg-accent-primary text-bg-main px-6 py-2 rounded-lg hover:bg-accent-primary/90 transition-colors font-open-sans inline-block"
+                    >
+                      Crear Primer Partido
+                    </Link>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Controles de Paginación */}
+            {totalMatches > matchesPerPage && (
+              <div className="mt-8 flex flex-col sm:flex-row items-center justify-between gap-4 bg-bg-main border border-border rounded-lg p-4">
+                {/* Información de página */}
+                <div className="text-sm text-text-secondary font-open-sans">
+                  Mostrando {startItem} - {endItem} de {totalMatches} partidos
+                </div>
+
+                {/* Controles de navegación */}
+                <div className="flex items-center gap-2">
+                  {/* Botón Anterior */}
+                  <button
+                    onClick={() => handlePageChange(currentPage - 1)}
+                    disabled={currentPage === 1}
+                    className={`px-3 py-2 rounded-lg font-open-sans font-medium transition-colors ${
+                      currentPage === 1
+                        ? 'bg-bg-secondary text-text-secondary cursor-not-allowed'
+                        : 'bg-bg-secondary text-text-main hover:bg-accent-primary hover:text-bg-main border border-border'
+                    }`}
                   >
-                    Crear Primer Partido
-                  </Link>
-                )}
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                    </svg>
+                  </button>
+
+                  {/* Números de página */}
+                  <div className="flex gap-1">
+                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                      let pageNumber;
+                      if (totalPages <= 5) {
+                        pageNumber = i + 1;
+                      } else if (currentPage <= 3) {
+                        pageNumber = i + 1;
+                      } else if (currentPage >= totalPages - 2) {
+                        pageNumber = totalPages - 4 + i;
+                      } else {
+                        pageNumber = currentPage - 2 + i;
+                      }
+
+                      return (
+                        <button
+                          key={pageNumber}
+                          onClick={() => handlePageChange(pageNumber)}
+                          className={`px-3 py-2 rounded-lg font-open-sans font-medium transition-colors ${
+                            currentPage === pageNumber
+                              ? 'bg-accent-primary text-bg-main'
+                              : 'bg-bg-secondary text-text-main hover:bg-accent-primary hover:text-bg-main border border-border'
+                          }`}
+                        >
+                          {pageNumber}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Botón Siguiente */}
+                  <button
+                    onClick={() => handlePageChange(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                    className={`px-3 py-2 rounded-lg font-open-sans font-medium transition-colors ${
+                      currentPage === totalPages
+                        ? 'bg-bg-secondary text-text-secondary cursor-not-allowed'
+                        : 'bg-bg-secondary text-text-main hover:bg-accent-primary hover:text-bg-main border border-border'
+                    }`}
+                  >
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                </div>
+
+                {/* Información adicional */}
+                <div className="text-sm text-text-secondary font-open-sans">
+                  Página {currentPage} de {totalPages}
+                </div>
               </div>
             )}
-          </div>
+          </>
         ) : (
           <div className="bg-bg-secondary border border-border rounded-lg p-8 text-center">
             <svg className="h-16 w-16 text-text-secondary mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -6,6 +6,7 @@ import { useToast } from '@/hooks/useToast'
 import { getPendingInvitations, respondToInvitation, MatchInvitation } from '@/lib/matchInvitations'
 import { Bell, Check, X, Calendar, MapPin, Users, Clock } from 'lucide-react'
 import { parseMatchDataForDisplay, getUserTimezone } from '@/lib/utils/timezoneUtils'
+import { getTimeUntilExpiration } from '@/lib/utils/timeUtils'
 
 export default function InvitationNotifications() {
   const { user } = useAuth()
@@ -158,6 +159,14 @@ export default function InvitationNotifications() {
                       <div className="flex items-center space-x-1">
                         <MapPin className="w-4 h-4" />
                         <span>{invitation.match.location_name}</span>
+                      </div>
+                    )}
+                    {invitation.expires_at && (
+                      <div className="flex items-center space-x-1">
+                        <Clock className="w-4 h-4 text-orange-500" />
+                        <span className="text-orange-500 font-medium">
+                          {getTimeUntilExpiration(invitation.expires_at).displayText}
+                        </span>
                       </div>
                     )}
                   </div>
