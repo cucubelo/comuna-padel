@@ -757,6 +757,17 @@ export default function OptimizedGroupDetails({
                     userTimezone
                   );
 
+                  // Format the date string to avoid rendering Date object directly
+                  const formattedDateString = matchTimezoneData.localDate.toLocaleDateString('es-ES', {
+                    weekday: 'long',
+                    day: 'numeric',
+                    month: 'long'
+                  });
+                  const formattedTimeString = matchTimezoneData.localDate.toLocaleTimeString('es-ES', {
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  });
+
                   return (
                     <div
                       key={match.id}
@@ -768,7 +779,7 @@ export default function OptimizedGroupDetails({
                         </h3>
                         <div className="flex items-center text-sm text-text-secondary">
                           <span>
-                            {matchTimezoneData.localDate} - {matchTimezoneData.localTime}
+                            {formattedDateString} - {formattedTimeString}
                           </span>
                           {matchTimezoneData.showTimezone && (
                             <div className="flex items-center ml-2">

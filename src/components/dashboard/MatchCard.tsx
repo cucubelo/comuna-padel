@@ -123,6 +123,9 @@ export default function MatchCard({
     })
   }
 
+  // Format the date string to avoid rendering Date object directly
+  const formattedDateString = formatDate(localDate)
+
 
   const isExpired = new Date(match.scheduled_at) < new Date()
   const canJoin = match.status === 'scheduled' && !isExpired && (match.is_public || match.user_status === 'pending')
@@ -163,7 +166,7 @@ export default function MatchCard({
           <svg className="h-4 w-4 text-accent-primary mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
           </svg>
-          <span className="capitalize text-xs sm:text-sm truncate">{formatDate(localDate)}</span>
+          <span className="capitalize text-xs sm:text-sm truncate">{formattedDateString}</span>
         </div>
         <div className="flex items-center text-sm text-text-secondary font-open-sans mb-1">
           <svg className="h-4 w-4 text-accent-secondary mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
